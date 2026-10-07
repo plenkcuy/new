@@ -2,12 +2,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Lumen Invest — Dashboard",
+  title: { default: "Lumen Invest", template: "%s · Lumen Invest" },
   description: "Dashboard portofolio investasi",
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b070a",
+  themeColor: "#050a0a",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
