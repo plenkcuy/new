@@ -15,13 +15,13 @@ export function AiInsights() {
         aria-hidden
         className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
         style={{
-          background: "radial-gradient(60% 100% at 50% 100%, rgba(232,195,222,0.45), transparent 70%)",
+          background: "radial-gradient(60% 100% at 50% 100%, rgba(94,234,212,0.4), transparent 70%)",
         }}
       />
 
       <button
-        className="relative z-10 mt-8 rounded-full px-7 py-3 text-sm font-medium text-white shadow-[0_0_40px_rgba(200,146,187,0.45)] transition hover:brightness-110"
-        style={{ background: "linear-gradient(120deg,#d8a3cb,#9b6a8f)" }}
+        className="relative z-10 mt-8 rounded-full px-7 py-3 text-sm font-medium text-[#031a18] shadow-[0_0_40px_rgba(45,212,191,0.45)] transition hover:brightness-110"
+        style={{ background: "linear-gradient(120deg,#5eead4,#2dd4bf)" }}
       >
         Jelajahi Insight AI
       </button>

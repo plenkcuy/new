@@ -21,7 +21,7 @@ export function TotalHolding() {
             aria-label="Periode"
           >
             {RANGES.map((r) => (
-              <option key={r} value={r} className="bg-[#0a0709]">
+              <option key={r} value={r} className="bg-[#060d0d]">
                 {r}
               </option>
             ))}

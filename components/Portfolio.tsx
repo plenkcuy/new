@@ -9,7 +9,7 @@ export function Portfolio() {
         <h2 className="text-lg">Portofolioku</h2>
         <div className="flex items-center gap-2">
           <button className="pill">Lihat semua</button>
-          <button className="icon-btn !h-9 !w-9" aria-label="Buka portofolio">
+          <button className="icon-btn h-9! w-9!" aria-label="Buka portofolio">
             <ArrowUpRight size={16} />
           </button>
         </div>

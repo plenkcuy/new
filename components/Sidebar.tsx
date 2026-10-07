@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import {
   BarChart3,
   Briefcase,
@@ -6,21 +9,28 @@ import {
   LineChart,
   Settings,
   Users,
+  X,
+  type LucideIcon,
 } from "lucide-react";
 
 const NAV = [
-  { label: "Dashboard", icon: LayoutDashboard, active: true },
+  { label: "Dashboard", icon: LayoutDashboard },
   { label: "Portofolio", icon: Briefcase },
   { label: "Analisis", icon: BarChart3 },
   { label: "Pasar", icon: LineChart },
   { label: "Komunitas", icon: Users },
 ];
 
+const FOOTER_NAV = [
+  { label: "Pengaturan", icon: Settings },
+  { label: "Bantuan", icon: LifeBuoy },
+];
+
 export function Brand() {
   return (
     <div className="flex items-center gap-3">
       <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden>
-        <circle cx="16" cy="16" r="6" fill="#c892bb" />
+        <circle cx="16" cy="16" r="6" fill="#2dd4bf" />
         {Array.from({ length: 8 }).map((_, i) => {
           const a = (i * Math.PI) / 4;
           const x1 = 16 + Math.cos(a) * 10;
@@ -34,7 +44,7 @@ export function Brand() {
               y1={y1.toFixed(2)}
               x2={x2.toFixed(2)}
               y2={y2.toFixed(2)}
-              stroke="#c892bb"
+              stroke="#2dd4bf"
               strokeWidth="2"
               strokeLinecap="round"
             />
@@ -46,32 +56,47 @@ export function Brand() {
   );
 }
 
-export function Sidebar() {
+type SidebarProps = {
+  /** Hanya berpengaruh di layar kecil (drawer). Di desktop sidebar selalu tampil. */
+  open: boolean;
+  onClose: () => void;
+};
+
+export function Sidebar({ open, onClose }: SidebarProps) {
+  const [active, setActive] = useState("Dashboard");
+
+  const select = (label: string) => {
+    setActive(label);
+    onClose();
+  };
+
+  const item = ({ label, icon: Icon }: { label: string; icon: LucideIcon }) => (
+    <button key={label} type="button" className="nav-item" data-active={active === label} onClick={() => select(label)}>
+      <Icon size={20} strokeWidth={1.6} />
+      {label}
+    </button>
+  );
+
   return (
-    <aside className="card hidden h-full flex-col p-4 lg:flex">
-      <div className="px-3 pb-8 pt-4">
+    <aside
+      aria-label="Navigasi utama"
+      className={[
+        "card fixed inset-y-3 left-3 z-50 flex w-[280px] max-w-[85vw] flex-col p-4",
+        "transition-[transform,visibility] duration-300 ease-out",
+        open ? "visible translate-x-0" : "invisible -translate-x-[115%]",
+        "lg:visible lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0",
+      ].join(" ")}
+    >
+      <div className="flex items-center justify-between px-3 pb-8 pt-4">
         <Brand />
+        <button type="button" className="icon-btn h-10! w-10! lg:hidden" aria-label="Tutup menu" onClick={onClose}>
+          <X size={18} />
+        </button>
       </div>
 
-      <nav className="flex flex-col gap-2">
-        {NAV.map(({ label, icon: Icon, active }) => (
-          <a key={label} href="#" className="nav-item" data-active={!!active}>
-            <Icon size={20} strokeWidth={1.6} />
-            {label}
-          </a>
-        ))}
-      </nav>
+      <nav className="flex flex-col gap-2">{NAV.map(item)}</nav>
 
-      <div className="mt-auto flex flex-col gap-1 pb-2">
-        <a href="#" className="nav-item">
-          <Settings size={20} strokeWidth={1.6} />
-          Pengaturan
-        </a>
-        <a href="#" className="nav-item">
-          <LifeBuoy size={20} strokeWidth={1.6} />
-          Bantuan
-        </a>
-      </div>
+      <div className="mt-auto flex flex-col gap-1 pb-2 pt-6">{FOOTER_NAV.map(item)}</div>
     </aside>
   );
 }

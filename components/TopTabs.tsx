@@ -23,7 +23,7 @@ export function TopTabs() {
         ))}
       </div>
 
-      <label className="flex w-full items-center gap-3 rounded-full border border-[var(--line)] bg-[#0a0709]/80 px-5 py-3 text-[15px] text-[var(--muted)] sm:w-[360px]">
+      <label className="flex w-full items-center gap-3 rounded-full border border-[var(--line)] bg-[#060d0d]/80 px-5 py-3 text-[15px] text-[var(--muted)] sm:w-[360px]">
         <Mic size={18} strokeWidth={1.6} />
         <input
           type="text"

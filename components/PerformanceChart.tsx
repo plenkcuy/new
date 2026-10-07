@@ -35,7 +35,7 @@ function ChartTooltip({ active, payload, range, first }: TipProps) {
   const p = payload[0].payload;
   const change = ((p.value - first) / first) * 100;
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#161015] px-4 py-3 shadow-xl">
+    <div className="rounded-2xl border border-white/10 bg-[#0d1717] px-4 py-3 shadow-xl">
       <div className="text-[11px] text-[var(--muted)]">{fmt(p.t, fullFmt[range])}</div>
       <div className="mt-1 flex items-center gap-3">
         <span className="text-sm font-medium">{idr(p.value)}</span>
@@ -60,7 +60,7 @@ export function PerformanceChart() {
         <h2 className="text-lg">Performa Portofolio</h2>
         <div className="flex flex-wrap gap-2">
           {RANGES.map((r) => (
-            <button key={r} className="pill !px-5" data-active={range === r} onClick={() => setRange(r)}>
+            <button key={r} className="pill px-5!" data-active={range === r} onClick={() => setRange(r)}>
               {r}
             </button>
           ))}
@@ -72,15 +72,15 @@ export function PerformanceChart() {
           <AreaChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="perfFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#c892bb" stopOpacity={0.45} />
-                <stop offset="100%" stopColor="#c892bb" stopOpacity={0} />
+                <stop offset="0%" stopColor="#2dd4bf" stopOpacity={0.45} />
+                <stop offset="100%" stopColor="#2dd4bf" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
             <XAxis
               dataKey="t"
               tickFormatter={(t: number) => fmt(t, tickFmt[range])}
-              tick={{ fill: "#9b8c98", fontSize: 11 }}
+              tick={{ fill: "#86a09c", fontSize: 11 }}
               axisLine={false}
               tickLine={false}
               minTickGap={32}
@@ -88,7 +88,7 @@ export function PerformanceChart() {
             <YAxis
               domain={["dataMin - 5000000", "dataMax + 5000000"]}
               tickFormatter={(v: number) => `${Math.round(v / 1_000_000)} jt`}
-              tick={{ fill: "#9b8c98", fontSize: 11 }}
+              tick={{ fill: "#86a09c", fontSize: 11 }}
               axisLine={false}
               tickLine={false}
               width={52}
@@ -100,10 +100,10 @@ export function PerformanceChart() {
             <Area
               type="monotone"
               dataKey="value"
-              stroke="#d9a8cc"
+              stroke="#5eead4"
               strokeWidth={2}
               fill="url(#perfFill)"
-              activeDot={{ r: 6, fill: "#f4c9e8", stroke: "rgba(244,201,232,0.35)", strokeWidth: 8 }}
+              activeDot={{ r: 6, fill: "#99f6e4", stroke: "rgba(153,246,228,0.35)", strokeWidth: 8 }}
               isAnimationActive={false}
             />
           </AreaChart>
