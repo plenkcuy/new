@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0b070a;
-  --card: #0a0709;
-  --card-soft: #120c10;
-  --line: rgba(255, 255, 255, 0.06);
-  --mauve: #c892bb;
-  --mauve-deep: #7c4f72;
-  --mauve-soft: #e8c3de;
-  --text: #f4eaf1;
-  --muted: #9b8c98;
+  --bg: #050a0a;
+  --card: #060d0d;
+  --card-soft: #0b1515;
+  --line: rgba(255, 255, 255, 0.07);
+  --accent: #2dd4bf;
+  --accent-deep: #0f766e;
+  --accent-soft: #99f6e4;
+  --text: #eaf6f4;
+  --muted: #86a09c;
   --up: #4ade80;
   --down: #f87171;
 }
@@ -24,102 +24,112 @@ body {
   font-family: "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(1200px 700px at 70% -10%, rgba(124, 79, 114, 0.35), transparent 60%),
-    radial-gradient(900px 600px at 0% 100%, rgba(124, 79, 114, 0.18), transparent 60%),
+    radial-gradient(1200px 700px at 70% -10%, rgba(20, 184, 166, 0.28), transparent 60%),
+    radial-gradient(900px 600px at 0% 100%, rgba(15, 118, 110, 0.2), transparent 60%),
     var(--bg);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Kartu gelap standar */
-.card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 28px;
-}
+/*
+  Kelas kustom ditaruh di @layer components supaya kelas utilitas Tailwind
+  (p-6, pr-9, h-9, dst.) tetap bisa menimpanya. Tanpa layer, CSS biasa
+  selalu menang atas utilitas di Tailwind v4.
+*/
+@layer components {
+  /* Kartu gelap standar */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 28px;
+  }
 
-/* Kartu dengan sorotan mauve (efek kaca) */
-.card-glow {
-  position: relative;
-  overflow: hidden;
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background:
-    radial-gradient(120% 140% at 70% 0%, rgba(200, 146, 187, 0.28), transparent 55%),
-    linear-gradient(160deg, #1b1218 0%, #0a0709 70%);
-}
+  /* Kartu dengan sorotan tosca (efek kaca) */
+  .card-glow {
+    position: relative;
+    overflow: hidden;
+    border-radius: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      radial-gradient(120% 140% at 70% 0%, rgba(45, 212, 191, 0.26), transparent 55%),
+      linear-gradient(160deg, #0f1f1e 0%, #060d0d 70%);
+  }
 
-/* Tombol pil */
-.pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  padding: 6px 16px;
-  font-size: 13px;
-  color: var(--text);
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
-}
-.pill:hover {
-  border-color: rgba(255, 255, 255, 0.5);
-}
-.pill[data-active="true"] {
-  background: linear-gradient(120deg, var(--mauve) 0%, var(--mauve-deep) 100%);
-  border-color: transparent;
-  color: #fff;
-}
+  /* Tombol pil */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    padding: 6px 16px;
+    font-size: 13px;
+    color: var(--text);
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+  }
+  .pill:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  .pill[data-active="true"] {
+    background: linear-gradient(120deg, #0f8f83 0%, #0b5a54 100%);
+    border-color: transparent;
+    color: #fff;
+  }
 
-.pill-solid {
-  background: #0a0709;
-  border-color: var(--line);
-  padding: 12px 24px;
-  font-size: 15px;
-}
-.pill-solid[data-active="true"] {
-  background: linear-gradient(120deg, #8e5c82 0%, #4a2d43 100%);
-}
+  .pill-solid {
+    background: var(--card);
+    border-color: var(--line);
+    padding: 12px 24px;
+    font-size: 15px;
+  }
+  .pill-solid[data-active="true"] {
+    background: linear-gradient(120deg, #0e8a7e 0%, #08403c 100%);
+  }
 
-.icon-btn {
-  display: inline-flex;
-  height: 48px;
-  width: 48px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: #0a0709;
-  border: 1px solid var(--line);
-  color: var(--text);
-  transition: background 0.2s;
-}
-.icon-btn:hover {
-  background: #1a1218;
-}
+  .icon-btn {
+    display: inline-flex;
+    height: 48px;
+    width: 48px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    color: var(--text);
+    transition: background 0.2s;
+  }
+  .icon-btn:hover {
+    background: #0f1c1c;
+  }
 
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  border-radius: 18px;
-  padding: 14px 18px;
-  font-size: 15px;
-  color: #d9ccd6;
-  transition: background 0.2s, color 0.2s;
-}
-.nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-.nav-item[data-active="true"] {
-  background: linear-gradient(100deg, #b184a5 0%, #3a2434 100%);
-  color: #fff;
-}
+  .nav-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 14px;
+    border-radius: 18px;
+    padding: 14px 18px;
+    font-size: 15px;
+    color: #cfe3e0;
+    text-align: left;
+    transition: background 0.2s, color 0.2s;
+  }
+  .nav-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .nav-item[data-active="true"] {
+    background: linear-gradient(100deg, #0e8a7e 0%, #0a2f2c 100%);
+    color: #fff;
+  }
 
-.up {
-  color: var(--up);
-}
-.down {
-  color: var(--down);
+  .up {
+    color: var(--up);
+  }
+  .down {
+    color: var(--down);
+  }
 }
 
 .recharts-wrapper *:focus {
