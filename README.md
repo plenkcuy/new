@@ -27,9 +27,9 @@ vercel --prod # produksi
 ## Struktur
 
 ```
-app/            layout, halaman utama, gaya global (token warna di :root)
-components/     Sidebar, Header, TopTabs, TotalHolding, AiInsights,
-                Watchlist, Portfolio, PerformanceChart
+app/            layout, halaman utama, gaya global (warna tosca ada di :root)
+components/     AppShell (layout + drawer menu), Sidebar, Header, TopTabs,
+                TotalHolding, AiInsights, Watchlist, Portfolio, PerformanceChart
 lib/data.ts     data tiruan (deterministik) — ganti dengan API nyata nanti
 lib/format.ts   format Rupiah, persen, angka
 ```
