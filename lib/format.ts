@@ -14,5 +14,14 @@ export const compactIdr = (n: number) =>
 
 export const num = (n: number) => new Intl.NumberFormat("id-ID").format(n);
 
+export const decimal = (n: number, digits = 2) =>
+  new Intl.NumberFormat("id-ID", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n);
+
 export const pct = (n: number, digits = 2) =>
   `${n >= 0 ? "+" : ""}${n.toFixed(digits).replace(".", ",")}%`;
+
+/** "2026-10-07" → "7 Okt 2026" (UTC agar sama di server dan client). */
+export const formatDate = (iso: string) =>
+  new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(
+    new Date(iso),
+  );
