@@ -31,8 +31,8 @@ export function hasTier(current: Tier, required: Tier): boolean {
  * 2. Rute
  * ============================================================ */
 
-/** Rute tanpa login. Semua rute lain wajib login. */
-export const PUBLIC_ROUTES = ["/login"] as const;
+/** Rute tanpa login. Semua rute lain wajib login. /api/cron dijaga sendiri lewat CRON_SECRET. */
+export const PUBLIC_ROUTES = ["/login", "/api/cron"] as const;
 
 /**
  * Tier minimum per awalan rute. Rute yang tidak tercantum = "free" (cukup login).
@@ -43,6 +43,7 @@ export const ROUTE_RULES: ReadonlyArray<{ prefix: string; min: Tier }> = [
   { prefix: "/analysis", min: "premium" },
   { prefix: "/community", min: "premium" },
   { prefix: "/api/export", min: "premium" },
+  { prefix: "/api/journal/export", min: "premium" },
 ];
 
 /** Cocok pada batas segmen: "/admin" cocok dengan "/admin/x", bukan "/administrator". */
@@ -89,6 +90,7 @@ export const FEATURE_MIN_TIER = {
   "advanced-analytics": "premium",
   community: "premium",
   "export-csv": "premium",
+  "journal-analytics": "premium",
   "admin-panel": "admin",
 } as const satisfies Record<string, Tier>;
 
@@ -105,14 +107,16 @@ export type TierLimits = {
   chartRanges: readonly Range[];
   defaultRange: Range;
   marketFeed: "delayed" | "realtime";
+  /** Jumlah transaksi jurnal. null = tanpa batas. */
+  journalTrades: number | null;
 };
 
 const FREE_RANGES: readonly Range[] = ["1D", "1W", "1M"];
 
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
-  free: { watchlistItems: 3, chartRanges: FREE_RANGES, defaultRange: "1M", marketFeed: "delayed" },
-  premium: { watchlistItems: 5, chartRanges: RANGES, defaultRange: "1Y", marketFeed: "realtime" },
-  admin: { watchlistItems: 5, chartRanges: RANGES, defaultRange: "1Y", marketFeed: "realtime" },
+  free: { watchlistItems: 3, chartRanges: FREE_RANGES, defaultRange: "1M", marketFeed: "delayed", journalTrades: 30 },
+  premium: { watchlistItems: 5, chartRanges: RANGES, defaultRange: "1Y", marketFeed: "realtime", journalTrades: null },
+  admin: { watchlistItems: 5, chartRanges: RANGES, defaultRange: "1Y", marketFeed: "realtime", journalTrades: null },
 };
 
 export const limitsFor = (tier: Tier): TierLimits => TIER_LIMITS[tier];
@@ -135,6 +139,12 @@ export function getPlanComparison(): ComparisonRow[] {
     { label: "Rentang grafik performa", free: range(free.chartRanges), premium: range(premium.chartRanges) },
     { label: "Saham di watchlist", free: String(free.watchlistItems), premium: String(premium.watchlistItems) },
     { label: "Feed data pasar", free: "Tertunda", premium: "Real-time" },
+    {
+      label: "Transaksi di jurnal",
+      free: free.journalTrades === null ? "Tanpa batas" : String(free.journalTrades),
+      premium: premium.journalTrades === null ? "Tanpa batas" : String(premium.journalTrades),
+    },
+    { label: "Analitik jurnal", free: flag("journal-analytics"), premium: yes },
     { label: "Insight AI", free: flag("ai-insights"), premium: yes },
     { label: "Analisis lanjutan", free: flag("advanced-analytics"), premium: yes },
     { label: "Komunitas", free: flag("community"), premium: yes },

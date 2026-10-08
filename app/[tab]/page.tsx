@@ -14,6 +14,7 @@ import type { Query, ScreenProps } from "@/lib/shared";
 import { AccountScreens } from "./account";
 import { AdminScreen } from "./admin";
 import { DashboardScreen } from "./dashboard";
+import { JournalScreen } from "./journal";
 import { MarketScreen } from "./market";
 import { PortfolioScreen } from "./portfolio";
 import { AnalysisScreen, CommunityScreen } from "./premium";
@@ -23,6 +24,7 @@ type Screen = { title: string; render: (props: ScreenProps) => Promise<React.Rea
 const SCREENS: Record<string, Screen> = {
   dashboard: { title: "Dashboard", render: DashboardScreen },
   portfolio: { title: "Portofolio", render: PortfolioScreen },
+  journal: { title: "Jurnal", render: JournalScreen },
   market: { title: "Pasar", render: MarketScreen },
   analysis: { title: "Analisis", render: AnalysisScreen },
   community: { title: "Komunitas", render: CommunityScreen },

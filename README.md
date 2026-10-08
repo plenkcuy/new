@@ -22,12 +22,15 @@ Buka `/login`, pilih akun demo **Free**, **Premium**, atau **Admin**.
 | `/login` | publik | Login demo |
 | `/dashboard` | Free | Ringkasan. Insight AI, rentang grafik 6M/1Y, dan watchlist penuh terkunci untuk Free |
 | `/portfolio` | Free | Posisi & alokasi. Ekspor CSV khusus Premium |
+| `/journal` | Free | Jurnal transaksi saham IDX, saham US, crypto, meme coin. Free dibatasi 30 transaksi, analitik dan ekspor CSV khusus Premium |
 | `/market` | Free | Indeks & saham. Feed tertunda (Free) / real-time (Premium) |
 | `/analysis` | **Premium** | Risiko, sektor, kontributor |
 | `/community` | **Premium** | Diskusi investor |
 | `/settings`, `/support`, `/upgrade` | Free | Akun, FAQ, perbandingan paket |
 | `/admin` | **Admin** | Ringkasan sistem + daftar pengguna |
 | `GET /api/export` | Premium | CSV portofolio |
+| `GET /api/journal/export` | Premium | CSV jurnal transaksi |
+| `GET /api/cron/prices` | `CRON_SECRET` | Pembaruan harga dan kurs harian (dipanggil Vercel Cron) |
 
 Admin otomatis mencakup hak Premium (`free < premium < admin`).
 
@@ -84,6 +87,8 @@ Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani
 | Variabel | Wajib | Keterangan |
 |---|---|---|
 | `AUTH_SECRET` | production | Minimal 32 karakter acak (`openssl rand -base64 48`). Tanpa ini sesi ditolak. |
+| `DATABASE_URL` | fitur Jurnal | Connection string Neon. Jalankan `db/001_journal.sql` sekali di Neon. |
+| `CRON_SECRET` | production | Minimal 16 karakter acak untuk `/api/cron/prices`. Vercel mengirimnya otomatis. |
 | `DEMO_AUTH` | — | `true` mengaktifkan login demo. Development: aktif otomatis. **Production: mati kecuali `true`.** |
 
 ⚠️ Login demo membiarkan siapa pun memilih akun Admin. Pakai hanya untuk demo/pratinjau, bukan untuk pengguna nyata.
@@ -108,6 +113,16 @@ Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani
 2. Ganti `loginDemo` di `lib/actions.ts` dengan verifikasi kredensial (hash password, mis. argon2/bcrypt) atau OAuth/penyedia auth (Auth.js, Clerk, Supabase Auth). Setelah berhasil, panggil `createSession(user)`.
 3. Saat tier berubah (upgrade/downgrade), panggil `createSession(user)` lagi supaya cookie ikut diperbarui. Guard server sudah memakai tier terbaru dari repository.
 4. Tambahkan rate limiting & proteksi brute force pada endpoint login.
+
+## Jurnal transaksi
+
+Catatan transaksi disimpan di Neon (`db/001_journal.sql`: aset, transaksi, harga harian, kurs).
+
+- Mata uang: tiap transaksi memakai mata uang aset (IDR untuk IDX, USD untuk lainnya, USDT dianggap 1 USD). Laporan bisa IDR atau USD. Modal memakai kurs saat transaksi, nilai pasar memakai kurs hari itu, jadi pengaruh kurs terbaca terpisah.
+- Rumus ada di `lib/journal-calc.ts`: harga rata rata bergerak, untung rugi terealisasi dan belum, TWR, drawdown, win rate, profit factor, expectancy, kelipatan R.
+- Harga: Yahoo Finance (IDX, US, crypto besar) dan DexScreener (meme coin, lewat alamat kontrak), diperbarui harian oleh cron di `vercel.json`. Bila data pasar belum ada, jurnal memakai harga transaksi terakhir dan menandainya.
+- Fee bawaan per jenis aset ada di `FEE_DEFAULTS` (`lib/journal-input.ts`), isi kolom fee untuk angka sebenarnya dari brokermu.
+- Batas paket: `journalTrades` dan fitur `journal-analytics` di `lib/access.ts`.
 
 ## Catatan
 

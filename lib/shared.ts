@@ -111,3 +111,99 @@ export const formatDate = (iso: string) =>
   new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(
     new Date(iso),
   );
+
+/* ============================================================
+ * Jurnal transaksi (saham IDX, saham US, crypto, meme coin)
+ * ============================================================ */
+
+export const ASSET_CLASSES = ["idx", "us_stock", "crypto", "meme"] as const;
+export type AssetClass = (typeof ASSET_CLASSES)[number];
+
+export function isAssetClass(value: unknown): value is AssetClass {
+  return typeof value === "string" && (ASSET_CLASSES as readonly string[]).includes(value);
+}
+
+export const CLASS_LABEL: Record<AssetClass, string> = {
+  idx: "Saham IDX",
+  us_stock: "Saham US",
+  crypto: "Crypto",
+  meme: "Meme coin",
+};
+
+export const CLASS_COLOR: Record<AssetClass, string> = {
+  idx: "#2dd4bf",
+  us_stock: "#5b8def",
+  crypto: "#fbbf24",
+  meme: "#f472b6",
+};
+
+export type Ccy = "IDR" | "USD";
+
+export const CHAINS = ["solana", "ethereum", "base", "bsc"] as const;
+export type Chain = (typeof CHAINS)[number];
+
+export const CHAIN_LABEL: Record<Chain, string> = {
+  solana: "Solana",
+  ethereum: "Ethereum",
+  base: "Base",
+  bsc: "BNB Chain",
+};
+
+export const EMOTIONS = ["tenang", "yakin", "ragu", "takut", "fomo", "serakah"] as const;
+
+/** 1 lot saham IDX = 100 lembar. */
+export const IDX_LOT = 100;
+
+export const JOURNAL_METRICS = ["value", "pnl", "twr", "dd"] as const;
+export type JournalMetric = (typeof JOURNAL_METRICS)[number];
+
+export const METRIC_LABEL: Record<JournalMetric, string> = {
+  value: "Nilai",
+  pnl: "Untung rugi",
+  twr: "Kinerja",
+  dd: "Drawdown",
+};
+
+/** Satu titik kurva ekuitas harian. Metrik premium dihilangkan server untuk Free. */
+export type EquityPoint = {
+  t: number;
+  value: number;
+  pnl: number;
+  twr?: number;
+  dd?: number;
+};
+
+export type JournalFormState = {
+  ok: boolean;
+  message?: string;
+  values?: Record<string, string>;
+};
+
+/* ---------- Format jurnal ---------- */
+
+export const money = (n: number, ccy: Ccy) =>
+  ccy === "IDR"
+    ? idr(n)
+    : new Intl.NumberFormat("id-ID", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
+
+/** Harga satuan. Meme coin bisa sangat kecil, jadi pakai digit signifikan. */
+export function unitPrice(n: number, ccy: Ccy): string {
+  const prefix = ccy === "IDR" ? "Rp " : "$ ";
+  if (ccy === "IDR") return prefix + new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(n);
+  if (n >= 1) return prefix + new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n);
+  return prefix + new Intl.NumberFormat("id-ID", { maximumSignificantDigits: 6 }).format(n);
+}
+
+export const quantity = (n: number) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 8 }).format(n);
+
+/** Waktu ditampilkan dalam WIB agar sama di server dan client. */
+export const formatDateTime = (ms: number) =>
+  new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Jakarta",
+  }).format(ms);

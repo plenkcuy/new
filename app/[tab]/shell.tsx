@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3,
+  BookOpen,
   Briefcase,
   LayoutDashboard,
   LifeBuoy,
@@ -32,6 +33,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 const NAV_MAIN: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/portfolio", label: "Portofolio", icon: Briefcase },
+  { href: "/journal", label: "Jurnal", icon: BookOpen },
   { href: "/analysis", label: "Analisis", icon: BarChart3 },
   { href: "/market", label: "Pasar", icon: LineChart },
   { href: "/community", label: "Komunitas", icon: Users },
