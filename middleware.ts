@@ -1,8 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { deniedRedirect, isPublicRoute, requiredTierFor } from "@/lib/auth/access";
-import { SESSION_COOKIE } from "@/lib/auth/config";
-import { hasTier } from "@/lib/auth/tiers";
-import { verifyToken } from "@/lib/auth/token";
+import { deniedRedirect, hasTier, isPublicRoute, requiredTierFor } from "@/lib/access";
+import { SESSION_COOKIE, verifyToken } from "@/lib/session";
 
 /**
  * LAPISAN 1, penjaga di edge (cepat, kasar).
@@ -10,7 +8,7 @@ import { verifyToken } from "@/lib/auth/token";
  * - Tier tidak cukup   → /upgrade atau /forbidden (API: 403 JSON)
  *
  * Tier di sini dibaca dari cookie, bisa tertinggal jika tier berubah di tengah
- * sesi. Karena itu setiap halaman TETAP memanggil guard server (lib/auth/guards.ts)
+ * sesi. Karena itu setiap halaman TETAP memanggil guard server (lib/auth.ts)
  * yang membaca tier terbaru. Middleware bukan satu-satunya pagar.
  *
  * Sengaja TIDAK mengalihkan pengguna yang sudah login dari /login: halaman login

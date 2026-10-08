@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  async redirects() {
+    // "/" tidak punya halaman sendiri; middleware tetap menjaga /dashboard.
+    return [{ source: "/", destination: "/dashboard", permanent: false }];
+  },
 };
 
 export default nextConfig;

@@ -7,7 +7,7 @@ Stack: **Next.js 15 (App Router) · TypeScript · Tailwind v4 · Recharts**. Dat
 
 ```bash
 npm install
-cp .env.example .env.local   # lalu isi AUTH_SECRET (opsional di development)
+cp .env.example .env.local   # isi AUTH_SECRET (opsional di development)
 npm run dev                  # http://localhost:3000
 npm run build                # cek build produksi
 npm run typecheck
@@ -26,54 +26,58 @@ Buka `/login`, pilih akun demo **Free**, **Premium**, atau **Admin**.
 | `/analysis` | **Premium** | Risiko, sektor, kontributor |
 | `/community` | **Premium** | Diskusi investor |
 | `/settings`, `/support`, `/upgrade` | Free | Akun, FAQ, perbandingan paket |
-| `/admin`, `/admin/users` | **Admin** | Ringkasan sistem & daftar pengguna |
-| `GET /api/portfolio/export` | Premium | CSV portofolio |
-| `GET /api/admin/users` | Admin | JSON pengguna |
+| `/admin` | **Admin** | Ringkasan sistem + daftar pengguna |
+| `GET /api/export` | Premium | CSV portofolio |
 
 Admin otomatis mencakup hak Premium (`free < premium < admin`).
 
-## Struktur
+## Struktur (31 file, 7 folder)
 
 ```
-middleware.ts                 Lapisan 1: penjaga di edge
+middleware.ts               Lapisan 1: penjaga di edge
 app/
-  (auth)/login/               Halaman login
-  (app)/                      Semua halaman yang butuh login (layout = sidebar)
-    dashboard/ portfolio/ analysis/ market/ community/
-    settings/ support/ upgrade/ forbidden/
-    admin/ (page + users/)
-  api/admin/users/            API contoh (Admin)
-  api/portfolio/export/       API contoh (Premium)
-components/
-  layout/                     AppShell, Sidebar, UserMenu, nav-config
-  dashboard/                  Kartu & grafik dashboard
-  ui/                         PageHeader, StatCard, TierBadge, UpgradeCard, SymbolDot
+  login/page.tsx            Halaman login
+  api/export/route.ts       CSV portofolio (Premium)
+  [tab]/                    SEMUA menu sidebar (satu route dinamis)
+    page.tsx                Router: daftar SCREENS + guard tier terpusat
+    layout.tsx  shell.tsx   Layout + sidebar/menu pengguna (client)
+    error.tsx
+    dashboard.tsx  dashboard-widgets.tsx   Dashboard + watchlist/grafik (client)
+    portfolio.tsx  market.tsx
+    premium.tsx             Analisis + Komunitas
+    account.tsx             Pengaturan, Bantuan, Upgrade, Akses ditolak
+    admin.tsx
+components/ui.tsx           Komponen kecil dipakai banyak layar
 lib/
-  auth/
-    types.ts                  Tier, User, SessionUser
-    tiers.ts                  Urutan tier + hasTier()
-    access.ts                 ATURAN RUTE (satu sumber kebenaran), safeNext()
-    token.ts                  Cookie sesi HMAC-SHA256 (Web Crypto, tanpa dependensi)
-    config.ts                 Cookie, AUTH_SECRET, DEMO_AUTH
-    users.ts                  Repository pengguna (server-only) ← ganti dengan DB
-    session.ts                createSession / getSession (server-only)
-    guards.ts                 requireSession / requireTier / requireFeature / authorizeApi
-    actions.ts                Server actions login & logout
-  plans.ts                    Fitur per tier, batas (limit), tabel perbandingan paket
-  data/                       Data tiruan server-only (ganti dengan API/DB)
+  shared.ts                 Tipe domain + format Rupiah/persen/tanggal
+  access.ts                 Tier + ATURAN RUTE + fitur/batas paket   [edge-safe]
+  session.ts                Config + token sesi HMAC (Web Crypto)    [edge-safe]
+  auth.ts                   Repo pengguna, cookie sesi, guard server [server-only]
+  actions.ts                Server action: login & logout
+  data.ts                   Semua data tiruan                        [server-only]
 ```
+
+## Upload manual ke GitHub
+
+1. Ekstrak zip, lalu buka folder hasil ekstrak (jangan upload file `.zip`-nya, GitHub tidak mengekstraknya).
+2. Di repo: *Add file → Upload files*, lalu **drag seluruh isi folder** (folder `app`, `components`, `lib` dan file di root) sekaligus. Folder ikut terbawa beserta isinya.
+3. Pastikan `.gitignore` dan `.env.example` ikut (file berawalan titik kadang tersembunyi di Explorer/Finder; aktifkan "show hidden files").
+4. Folder bernama `[tab]` memang begitu namanya, jangan diubah.
+5. Jangan upload `.env.local` atau `node_modules`. Isi `AUTH_SECRET` di Vercel, bukan di repo.
 
 ## Model proteksi (defense in depth)
 
-1. **Middleware** (`middleware.ts`): belum login → `/login?next=…`; tier kurang → `/upgrade` atau `/forbidden`; API → 401/403 JSON. Cepat tapi hanya membaca tier dari cookie.
-2. **Guard server di setiap page** (`requireSession` / `requireTier` / `requireFeature`): ini lapisan **otoritatif**. Tier dibaca ulang dari repository, akun yang dibekukan langsung ditolak. Layout tidak dirender ulang saat pindah halaman, jadi guard harus ada di tiap page, bukan hanya di layout.
-3. **Guard di API & server action** (`authorizeApi`): route handler tidak boleh mengandalkan UI.
-4. **Pembatasan data di server**: konten premium tidak dirender untuk Free (diganti `UpgradeCard`), watchlist dipotong sesuai jatah, dan rentang grafik di luar jatah dikembalikan ke bawaan. Data tidak pernah dikirim lalu disembunyikan di browser.
+1. **Middleware**: belum login → `/login?next=…`; tier kurang → `/upgrade` atau `/forbidden`; API → 401/403 JSON. Cepat tapi hanya membaca tier dari cookie.
+2. **Guard server di `app/[tab]/page.tsx`** (`requireTier`, tier minimum dari `ROUTE_RULES`): lapisan **otoritatif**. Tier dibaca ulang dari repository, akun yang dibekukan langsung ditolak. Layout tidak dirender ulang saat pindah tab, jadi guard ada di page, bukan di layout.
+3. **Guard di API** (`authorizeApi`): route handler tidak boleh mengandalkan UI.
+4. **Pembatasan data di server**: konten premium tidak dirender untuk Free (diganti `UpgradeCard`), watchlist dipotong sesuai jatah, rentang grafik di luar jatah dikembalikan ke bawaan. Data tidak pernah dikirim lalu disembunyikan di browser.
 5. **UI** (ikon gembok di sidebar, tombol terkunci) hanya kenyamanan, bukan keamanan.
 
-Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani HMAC dan kedaluwarsa 8 jam.
+Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani HMAC, kedaluwarsa 8 jam.
 
-> Kebijakan: Next.js < 15.2.3 punya celah bypass middleware (CVE-2025-29927). `package.json` mengunci `^15.5.0`. Tetap pertahankan guard di server.
+> Next.js < 15.2.3 punya celah bypass middleware (CVE-2025-29927). `package.json` mengunci `^15.5.0`. Tetap pertahankan guard di server.
+
+> Hati-hati di `lib/actions.ts`: setiap fungsi yang diekspor dari file `"use server"` menjadi endpoint publik. Jangan taruh guard/helper di sana.
 
 ## Environment
 
@@ -90,23 +94,23 @@ Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani
 2. Settings → Environment Variables: isi `AUTH_SECRET`, dan `DEMO_AUTH=true` bila ingin demo online.
 3. Deploy.
 
-## Cara menambah halaman terproteksi
+## Cara menambah tab baru
 
-1. Buat `app/(app)/laporan/page.tsx`.
-2. Daftarkan di `lib/auth/access.ts` → `ROUTE_RULES`: `{ prefix: "/laporan", min: "premium" }`.
-3. Di page, panggil guard paling atas: `await requireTier("premium", "/laporan")` (atau `requireFeature("nama-fitur")`).
-4. Tambahkan ke `components/layout/nav-config.ts`. Ikon gembok muncul otomatis.
-5. Fitur baru? tambahkan ke `FEATURE_MIN_TIER` di `lib/plans.ts`.
+1. Tulis layar `export async function LaporanScreen({ user, query }: ScreenProps)` di salah satu file `app/[tab]/` (atau file baru).
+2. Daftarkan di `SCREENS` dalam `app/[tab]/page.tsx`: `laporan: { title: "Laporan", render: LaporanScreen }`.
+3. Butuh Premium/Admin? Tambahkan `{ prefix: "/laporan", min: "premium" }` ke `ROUTE_RULES` di `lib/access.ts`. Middleware, sidebar, dan guard otomatis ikut.
+4. Tambahkan menu di `NAV_MAIN` pada `app/[tab]/shell.tsx`.
+5. Fitur baru? tambahkan ke `FEATURE_MIN_TIER` di `lib/access.ts`.
 
 ## Mengganti login demo dengan login sungguhan
 
-1. Implementasikan `UserRepository` di `lib/auth/users.ts` dengan database (Prisma/Drizzle/Supabase).
-2. Ganti `loginDemo` di `lib/auth/actions.ts` dengan verifikasi kredensial (hash password, mis. argon2/bcrypt) atau OAuth/penyedia auth (Auth.js, Clerk, Supabase Auth). Setelah berhasil, panggil `createSession(user)`.
+1. Ganti isi `userRepo` di `lib/auth.ts` dengan query database (Prisma/Drizzle/Supabase).
+2. Ganti `loginDemo` di `lib/actions.ts` dengan verifikasi kredensial (hash password, mis. argon2/bcrypt) atau OAuth/penyedia auth (Auth.js, Clerk, Supabase Auth). Setelah berhasil, panggil `createSession(user)`.
 3. Saat tier berubah (upgrade/downgrade), panggil `createSession(user)` lagi supaya cookie ikut diperbarui. Guard server sudah memakai tier terbaru dari repository.
 4. Tambahkan rate limiting & proteksi brute force pada endpoint login.
 
 ## Catatan
 
-- Seluruh data (harga, portofolio, komunitas, admin) adalah **data tiruan**.
+- Seluruh data (harga, portofolio, komunitas, admin) adalah **data tiruan** di `lib/data.ts`.
 - Panel admin masih hanya-baca; aksi ubah paket/bekukan akun belum ada.
 - Pembayaran belum terhubung; halaman `/upgrade` mengarahkan ke kontak.
