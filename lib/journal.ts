@@ -7,6 +7,7 @@ import {
   findOversell,
   sliceEquity,
   summarize,
+  withLive,
   tradeStats,
   type AssetMeta,
   type EquitySlice,
@@ -17,7 +18,8 @@ import {
 } from "./journal-calc";
 import type { TradeFormValue } from "./journal-input";
 import { getUsdIdrAt, type FeedAsset } from "./market-feed";
-import type { AssetClass, Ccy } from "./shared";
+import { fetchQuotes, fetchUsdIdrLive, type QuoteTarget } from "./quotes";
+import type { AssetClass, Ccy, LivePosition } from "./shared";
 
 /* ============================================================
  * Membaca data
@@ -26,6 +28,7 @@ import type { AssetClass, Ccy } from "./shared";
 export type TradeRow = TradeInput &
   AssetMeta & {
     chain: string | null;
+    priceRef: string;
     takeProfit: number | null;
     setup: string | null;
     emotion: string | null;
@@ -38,7 +41,7 @@ const optNum = (value: string | null | undefined) => (value === null || value ==
 /** Seluruh transaksi milik satu pengguna, urut dari yang terlama. */
 export async function loadTradeRows(userId: string): Promise<TradeRow[]> {
   const rows = await db()`
-    select t.id::text as id, t.asset_id::text as asset_id, a.symbol, a.name, a.asset_class, a.ccy, a.chain,
+    select t.id::text as id, t.asset_id::text as asset_id, a.symbol, a.name, a.asset_class, a.ccy, a.chain, a.price_ref,
            t.side, t.qty::text as qty, t.price::text as price, t.fee::text as fee, t.usd_idr::text as usd_idr,
            (extract(epoch from t.traded_at) * 1000)::bigint::text as t,
            t.stop_loss::text as stop_loss, t.take_profit::text as take_profit,
@@ -56,6 +59,7 @@ export async function loadTradeRows(userId: string): Promise<TradeRow[]> {
     assetClass: r.asset_class as AssetClass,
     ccy: r.ccy as Ccy,
     chain: r.chain,
+    priceRef: r.price_ref,
     side: r.side as "buy" | "sell",
     qty: Number(r.qty),
     price: Number(r.price),
@@ -292,4 +296,99 @@ export async function removeTrade(userId: string, tradeId: number): Promise<Remo
 
   await db()`delete from journal_trades where id = ${tradeId}::bigint and user_id = ${userId}`;
   return { ok: true };
+}
+
+/* ============================================================
+ * Portofolio live
+ * ============================================================ */
+
+/** Aset yang masih punya sisa posisi, sebagai target pengambilan harga. */
+export function openTargets(rows: TradeRow[]): QuoteTarget[] {
+  const held = new Map<number, number>();
+  const meta = new Map<number, TradeRow>();
+  for (const r of [...rows].sort((a, b) => a.t - b.t || a.id - b.id)) {
+    held.set(r.assetId, (held.get(r.assetId) ?? 0) + (r.side === "buy" ? r.qty : -r.qty));
+    meta.set(r.assetId, r);
+  }
+  const targets: QuoteTarget[] = [];
+  for (const [assetId, qty] of held) {
+    const r = meta.get(assetId);
+    if (!r || qty <= 1e-9 * Math.max(1, r.qty)) continue;
+    targets.push({ assetId, assetClass: r.assetClass, symbol: r.symbol, chain: r.chain, priceRef: r.priceRef });
+  }
+  return targets;
+}
+
+const withTimeout = <T,>(job: Promise<T>, ms: number, fallback: T) =>
+  Promise.race([job, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
+
+export type PortfolioData = {
+  totalTrades: number;
+  positions: LivePosition[];
+  realized: number;
+  usdIdr: number;
+  equity: EquitySlice;
+  liveLoaded: boolean;
+};
+
+/** Portofolio dari data jurnal, dinilai dengan harga terkini (batas tunggu 3,5 detik). */
+export async function getPortfolio(opts: {
+  userId: string;
+  report: Ccy;
+  rangeDays: number;
+  premium: boolean;
+  maxAgeMs: number;
+}): Promise<PortfolioData> {
+  const rows = await loadTradeRows(opts.userId);
+
+  const assets = new Map<number, AssetMeta>();
+  for (const r of rows) {
+    assets.set(r.assetId, { id: r.assetId, symbol: r.symbol, name: r.name, assetClass: r.assetClass, ccy: r.ccy });
+  }
+
+  const [priceRows, fxRows] = await Promise.all([loadPriceRows([...assets.keys()]), loadFxRows()]);
+  const base = buildMarket(rows, priceRows, fxRows);
+
+  const targets = openTargets(rows);
+  const [quotes, usdIdrLive] = await Promise.all([
+    withTimeout(fetchQuotes(targets, opts.maxAgeMs), 3500, new Map()),
+    withTimeout(fetchUsdIdrLive(opts.maxAgeMs), 3500, null),
+  ]);
+
+  const now = Date.now();
+  const market = withLive(base, new Map([...quotes].map(([id, q]) => [id, q.price])), usdIdrLive, now);
+  const summary = summarize(rows, assets, market, opts.report, now);
+  const endDay = dayFloor(now);
+  const equity = sliceEquity(buildEquity(rows, assets, market, opts.report, endDay), opts.rangeDays, endDay, opts.premium);
+
+  const meta = new Map(rows.map((r) => [r.assetId, r]));
+  const positions: LivePosition[] = summary.positions.map((p) => {
+    const quote = quotes.get(p.assetId);
+    const symbol = meta.get(p.assetId)?.symbol ?? p.symbol;
+    return {
+      assetId: p.assetId,
+      symbol: p.symbol,
+      name: p.name,
+      assetClass: p.assetClass,
+      ccy: p.ccy,
+      qty: p.qty,
+      avgPrice: p.avgPrice,
+      costReport: p.cost,
+      price: p.price,
+      changePct: quote?.changePct ?? null,
+      priceFromTrade: p.priceFromTrade,
+      source: quote?.source ?? null,
+      stream: p.assetClass === "crypto" && /^[A-Z0-9]{2,12}$/.test(symbol) ? `${symbol.toLowerCase()}usdt` : null,
+    };
+  });
+
+  const fxMarks = market.fx;
+  return {
+    totalTrades: rows.length,
+    positions,
+    realized: summary.totals.realized,
+    usdIdr: fxMarks.length ? fxMarks[fxMarks.length - 1].v : 1,
+    equity,
+    liveLoaded: quotes.size > 0,
+  };
 }

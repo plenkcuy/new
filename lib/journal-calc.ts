@@ -152,6 +152,8 @@ export type Market = {
   closes: Map<number, Mark[]>;
   /** Kurs USD ke IDR. */
   fx: Mark[];
+  /** Aset yang harganya berasal dari kutipan terkini (bukan data harian atau transaksi). */
+  live: Set<number>;
 };
 
 function mergeMarks(rows: Mark[], extra: Mark[]): Mark[] {
@@ -180,7 +182,20 @@ export function buildMarket(trades: TradeInput[], priceRows: Map<number, Mark[]>
     [...fxRows].sort((a, b) => a.t - b.t),
     trades.map((tr) => ({ t: tr.t, v: tr.usdIdr })),
   );
-  return { price, closes, fx };
+  return { price, closes, fx, live: new Set() };
+}
+
+/** Menambahkan harga dan kurs terkini sebagai titik data terbaru. */
+export function withLive(market: Market, prices: Map<number, number>, usdIdr: number | null, now: number): Market {
+  const price = new Map(market.price);
+  for (const [assetId, v] of prices) {
+    price.set(
+      assetId,
+      [...(price.get(assetId) ?? []), { t: now, v }].sort((a, b) => a.t - b.t),
+    );
+  }
+  const fx = usdIdr ? [...market.fx, { t: now, v: usdIdr }].sort((a, b) => a.t - b.t) : market.fx;
+  return { price, closes: market.closes, fx, live: new Set(prices.keys()) };
 }
 
 /** Nilai terakhir pada atau sebelum `t`. Jika belum ada data, pakai data paling awal. */
@@ -273,7 +288,7 @@ export function summarize(
     const avgPrice = state.costNative / state.qty;
     const price = markAt(market.price.get(assetId), now) ?? avgPrice;
     const lastClose = market.closes.get(assetId)?.at(-1);
-    const priceFromTrade = !lastClose || now - lastClose.t > STALE_AFTER_MS;
+    const priceFromTrade = !market.live.has(assetId) && (!lastClose || now - lastClose.t > STALE_AFTER_MS);
 
     const value = state.qty * price * convRate(asset.ccy, report, usdIdrNow);
     const unrealized = value - state.costReport;

@@ -12,7 +12,7 @@ import { DAY_MS } from "./journal-calc";
 
 const HEADERS = { "User-Agent": "Mozilla/5.0 (compatible; LumenJournal/1.0)", Accept: "application/json" };
 
-async function getJson(url: string): Promise<unknown> {
+export async function getJson(url: string): Promise<unknown> {
   try {
     const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(8000), cache: "no-store" });
     return res.ok ? await res.json() : null;
@@ -46,17 +46,29 @@ async function yahooDaily(ref: string, fromMs: number): Promise<DailyClose[]> {
   return rows;
 }
 
-type DexResponse = { pairs?: { chainId?: string; priceUsd?: string; liquidity?: { usd?: number } }[] | null };
+type DexResponse = {
+  pairs?: { chainId?: string; priceUsd?: string; liquidity?: { usd?: number }; priceChange?: { h24?: number } }[] | null;
+};
 
-async function dexScreenerPrice(chain: string, address: string): Promise<number | null> {
+/** Harga terkini token dari pair dengan likuiditas terbesar di chain yang dipilih. */
+export async function dexScreenerQuote(
+  chain: string,
+  address: string,
+): Promise<{ price: number; changePct: number | null } | null> {
   const data = (await getJson(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(address)}`)) as DexResponse | null;
   const pairs = (data?.pairs ?? []).filter((p) => p.chainId === chain && Number(p.priceUsd) > 0);
   if (pairs.length === 0) return null;
   pairs.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
-  return Number(pairs[0].priceUsd);
+  const best = pairs[0];
+  const change = best.priceChange?.h24;
+  return { price: Number(best.priceUsd), changePct: typeof change === "number" ? change : null };
 }
 
-async function latestUsdIdrFallback(): Promise<number | null> {
+async function dexScreenerPrice(chain: string, address: string): Promise<number | null> {
+  return (await dexScreenerQuote(chain, address))?.price ?? null;
+}
+
+export async function latestUsdIdrFallback(): Promise<number | null> {
   const data = (await getJson("https://open.er-api.com/v6/latest/USD")) as { rates?: { IDR?: number } } | null;
   const rate = data?.rates?.IDR;
   return typeof rate === "number" && rate > 1000 ? rate : null;

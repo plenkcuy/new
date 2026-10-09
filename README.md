@@ -30,6 +30,7 @@ Buka `/login`, pilih akun demo **Free**, **Premium**, atau **Admin**.
 | `/admin` | **Admin** | Ringkasan sistem + daftar pengguna |
 | `GET /api/export` | Premium | CSV portofolio |
 | `GET /api/journal/export` | Premium | CSV jurnal transaksi |
+| `GET /api/prices` | Login | Harga terkini posisi terbuka milik pengguna (Free tiap 60 detik, Premium tiap 10 detik) |
 | `GET /api/cron/prices` | `CRON_SECRET` | Pembaruan harga dan kurs harian (dipanggil Vercel Cron) |
 
 Admin otomatis mencakup hak Premium (`free < premium < admin`).
@@ -121,6 +122,7 @@ Catatan transaksi disimpan di Neon (`db/001_journal.sql`: aset, transaksi, harga
 - Mata uang: tiap transaksi memakai mata uang aset (IDR untuk IDX, USD untuk lainnya, USDT dianggap 1 USD). Laporan bisa IDR atau USD. Modal memakai kurs saat transaksi, nilai pasar memakai kurs hari itu, jadi pengaruh kurs terbaca terpisah.
 - Rumus ada di `lib/journal-calc.ts`: harga rata rata bergerak, untung rugi terealisasi dan belum, TWR, drawdown, win rate, profit factor, expectancy, kelipatan R.
 - Harga: Yahoo Finance (IDX, US, crypto besar) dan DexScreener (meme coin, lewat alamat kontrak), diperbarui harian oleh cron di `vercel.json`. Bila data pasar belum ada, jurnal memakai harga transaksi terakhir dan menandainya.
+- Portofolio (`/portfolio`) dihitung dari jurnal dan dinilai dengan harga terkini: Binance (crypto), Pluang (saham IDX), Reku (saham US), DexScreener (meme coin). Premium mendapat WebSocket Binance langsung di browser, Free memakai polling 60 detik. Scraper ada di `lib/scrapers/` dan bergantung pada struktur `__NEXT_DATA__` situs sumber, jadi cek bila harga berhenti muncul.
 - Fee bawaan per jenis aset ada di `FEE_DEFAULTS` (`lib/journal-input.ts`), isi kolom fee untuk angka sebenarnya dari brokermu.
 - Batas paket: `journalTrades` dan fitur `journal-analytics` di `lib/access.ts`.
 

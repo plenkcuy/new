@@ -207,3 +207,27 @@ export const formatDateTime = (ms: number) =>
     hour12: false,
     timeZone: "Asia/Jakarta",
   }).format(ms);
+
+/* ---------- Portofolio live ---------- */
+
+/** Posisi terbuka yang dikirim ke client untuk dihitung ulang saat harga bergerak. */
+export type LivePosition = {
+  assetId: number;
+  symbol: string;
+  name: string;
+  assetClass: AssetClass;
+  ccy: Ccy;
+  qty: number;
+  /** Harga rata rata dalam mata uang aset. */
+  avgPrice: number;
+  /** Total modal dalam mata uang laporan. */
+  costReport: number;
+  price: number;
+  changePct: number | null;
+  priceFromTrade: boolean;
+  source: string | null;
+  /** Nama stream Binance (huruf kecil) untuk crypto, mis. btcusdt. */
+  stream: string | null;
+};
+
+export type LiveQuote = { price: number; changePct: number | null; source: string };
