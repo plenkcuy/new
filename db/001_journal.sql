@@ -11,8 +11,12 @@ create table if not exists journal_assets (
   contract_addr text,
   price_source  text not null check (price_source in ('yahoo', 'dexscreener')),
   price_ref     text not null,
+  icon_url      text,
   created_at    timestamptz not null default now()
 );
+
+-- Untuk database yang sudah menjalankan versi sebelumnya.
+alter table journal_assets add column if not exists icon_url text;
 
 create unique index if not exists journal_assets_uniq
   on journal_assets (asset_class, symbol, coalesce(chain, ''), coalesce(contract_addr, ''));

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Download, Lock, Trash2 } from "lucide-react";
-import { PageHeader, StatCard, SymbolDot, UpgradeCard } from "@/components/ui";
+import { AssetIcon } from "@/components/asset-icon";
+import { PageHeader, StatCard, UpgradeCard } from "@/components/ui";
 import { can, deniedRedirect, limitsFor } from "@/lib/access";
 import { getJournal, type JournalData } from "@/lib/journal";
 import { RANGE_DAYS } from "@/lib/journal-calc";
@@ -240,7 +241,7 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
               <tr key={p.assetId}>
                 <td>
                   <div className="flex items-center gap-3">
-                    <SymbolDot symbol={p.symbol} color={CLASS_COLOR[p.assetClass]} size={32} />
+                    <AssetIcon symbol={p.symbol} color={CLASS_COLOR[p.assetClass]} icon={p.icon} size={32} />
                     <div>
                       <div>{p.symbol}</div>
                       <div className="text-[11px] text-[var(--muted)]">{CLASS_LABEL[p.assetClass]}</div>
@@ -307,8 +308,13 @@ function HistoryTable({
                 <tr key={r.id}>
                   <td className="text-[var(--muted)]">{formatDateTime(r.t)}</td>
                   <td>
-                    <div>{r.symbol}</div>
-                    <div className="text-[11px] text-[var(--muted)]">{CLASS_LABEL[r.assetClass]}</div>
+                    <div className="flex items-center gap-3">
+                      <AssetIcon symbol={r.symbol} color={CLASS_COLOR[r.assetClass]} icon={r.icon} size={28} />
+                      <div>
+                        <div>{r.symbol}</div>
+                        <div className="text-[11px] text-[var(--muted)]">{CLASS_LABEL[r.assetClass]}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className={r.side === "buy" ? "up" : "down"}>{r.side === "buy" ? "Beli" : "Jual"}</td>
                   <td className="num">{r.assetClass === "idx" ? `${num(r.qty / IDX_LOT)} lot` : quantity(r.qty)}</td>

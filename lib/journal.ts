@@ -17,9 +17,9 @@ import {
   type TradeStats,
 } from "./journal-calc";
 import type { TradeFormValue } from "./journal-input";
-import { getUsdIdrAt, type FeedAsset } from "./market-feed";
+import { getUsdIdrAt, saveAssetIcons, type FeedAsset } from "./market-feed";
 import { fetchQuotes, fetchUsdIdrLive, type QuoteTarget } from "./quotes";
-import type { AssetClass, Ccy, LivePosition } from "./shared";
+import { assetIconUrl, type AssetClass, type Ccy, type LivePosition } from "./shared";
 
 /* ============================================================
  * Membaca data
@@ -29,6 +29,8 @@ export type TradeRow = TradeInput &
   AssetMeta & {
     chain: string | null;
     priceRef: string;
+    /** Ikon yang tersimpan di database (tanpa tebakan). */
+    iconStored: string | null;
     takeProfit: number | null;
     setup: string | null;
     emotion: string | null;
@@ -41,7 +43,7 @@ const optNum = (value: string | null | undefined) => (value === null || value ==
 /** Seluruh transaksi milik satu pengguna, urut dari yang terlama. */
 export async function loadTradeRows(userId: string): Promise<TradeRow[]> {
   const rows = await db()`
-    select t.id::text as id, t.asset_id::text as asset_id, a.symbol, a.name, a.asset_class, a.ccy, a.chain, a.price_ref,
+    select t.id::text as id, t.asset_id::text as asset_id, a.symbol, a.name, a.asset_class, a.ccy, a.chain, a.price_ref, a.icon_url,
            t.side, t.qty::text as qty, t.price::text as price, t.fee::text as fee, t.usd_idr::text as usd_idr,
            (extract(epoch from t.traded_at) * 1000)::bigint::text as t,
            t.stop_loss::text as stop_loss, t.take_profit::text as take_profit,
@@ -60,6 +62,8 @@ export async function loadTradeRows(userId: string): Promise<TradeRow[]> {
     ccy: r.ccy as Ccy,
     chain: r.chain,
     priceRef: r.price_ref,
+    iconStored: r.icon_url,
+    icon: assetIconUrl(r.asset_class as AssetClass, r.symbol, r.icon_url),
     side: r.side as "buy" | "sell",
     qty: Number(r.qty),
     price: Number(r.price),
@@ -116,6 +120,7 @@ export type HistoryRow = {
   symbol: string;
   assetClass: AssetClass;
   ccy: Ccy;
+  icon: string | null;
   side: "buy" | "sell";
   qty: number;
   price: number;
@@ -154,7 +159,7 @@ export async function getJournal(opts: {
 
   const assets = new Map<number, AssetMeta>();
   for (const r of rows) {
-    assets.set(r.assetId, { id: r.assetId, symbol: r.symbol, name: r.name, assetClass: r.assetClass, ccy: r.ccy });
+    assets.set(r.assetId, { id: r.assetId, symbol: r.symbol, name: r.name, assetClass: r.assetClass, ccy: r.ccy, icon: r.icon });
   }
 
   const [priceRows, fxRows] = await Promise.all([loadPriceRows([...assets.keys()]), loadFxRows()]);
@@ -177,6 +182,7 @@ export async function getJournal(opts: {
       symbol: r.symbol,
       assetClass: r.assetClass,
       ccy: r.ccy,
+      icon: r.icon ?? null,
       side: r.side,
       qty: r.qty,
       price: r.price,
@@ -343,7 +349,7 @@ export async function getPortfolio(opts: {
 
   const assets = new Map<number, AssetMeta>();
   for (const r of rows) {
-    assets.set(r.assetId, { id: r.assetId, symbol: r.symbol, name: r.name, assetClass: r.assetClass, ccy: r.ccy });
+    assets.set(r.assetId, { id: r.assetId, symbol: r.symbol, name: r.name, assetClass: r.assetClass, ccy: r.ccy, icon: r.icon });
   }
 
   const [priceRows, fxRows] = await Promise.all([loadPriceRows([...assets.keys()]), loadFxRows()]);
@@ -379,8 +385,19 @@ export async function getPortfolio(opts: {
       priceFromTrade: p.priceFromTrade,
       source: quote?.source ?? null,
       stream: p.assetClass === "crypto" && /^[A-Z0-9]{2,12}$/.test(symbol) ? `${symbol.toLowerCase()}usdt` : null,
+      icon: assetIconUrl(p.assetClass, p.symbol, quote?.icon ?? meta.get(p.assetId)?.iconStored),
     };
   });
+
+  // Ikon dari sumber disimpan sekali supaya halaman lain ikut menampilkannya.
+  const fresh = [...quotes]
+    .filter(([id, q]) => q.icon && q.icon !== meta.get(id)?.iconStored)
+    .map(([assetId, q]) => ({ assetId, icon: q.icon as string }));
+  try {
+    await saveAssetIcons(fresh);
+  } catch {
+    // Gagal menyimpan ikon tidak boleh menggagalkan halaman.
+  }
 
   const fxMarks = market.fx;
   return {

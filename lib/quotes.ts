@@ -1,5 +1,5 @@
 import "server-only";
-import { dexScreenerQuote, getJson, latestUsdIdrFallback } from "./market-feed";
+import { dexScreenerQuote, getJson, latestUsdIdrFallback, saveAssetIcons } from "./market-feed";
 import { scrapePluangPrice } from "./scrapers/pluang";
 import { scrapeRekuPrice } from "./scrapers/reku";
 import type { AssetClass } from "./shared";
@@ -17,6 +17,7 @@ export type Quote = {
   price: number;
   changePct: number | null;
   source: "pluang" | "reku" | "binance" | "dexscreener";
+  icon: string | null;
   t: number;
 };
 
@@ -45,7 +46,7 @@ async function binanceQuote(symbol: string): Promise<Quote | null> {
     const price = Number(data?.lastPrice);
     if (price > 0) {
       const change = Number(data?.priceChangePercent);
-      return { price, changePct: Number.isFinite(change) ? change : null, source: "binance", t: Date.now() };
+      return { price, changePct: Number.isFinite(change) ? change : null, source: "binance", icon: null, t: Date.now() };
     }
   }
   return null;
@@ -104,6 +105,12 @@ export async function fetchQuotes(targets: QuoteTarget[], maxAgeMs: number): Pro
     });
   }
   return result;
+}
+
+/** Mengisi ikon aset yang belum punya, memakai halaman sumber yang sama dengan harga. */
+export async function refreshAssetIcon(target: QuoteTarget): Promise<void> {
+  const quote = await resolve(target, 60_000);
+  if (quote?.icon) await saveAssetIcons([{ assetId: target.assetId, icon: quote.icon }]);
 }
 
 /* ---------- Kurs USD ke IDR ---------- */

@@ -31,6 +31,7 @@ export type AssetMeta = {
   name: string;
   assetClass: AssetClass;
   ccy: Ccy;
+  icon?: string | null;
 };
 
 export type Mark = { t: number; v: number };
@@ -224,6 +225,7 @@ export type PositionView = {
   name: string;
   assetClass: AssetClass;
   ccy: Ccy;
+  icon: string | null;
   qty: number;
   /** Harga rata rata dalam mata uang aset. */
   avgPrice: number;
@@ -299,6 +301,7 @@ export function summarize(
       name: asset.name,
       assetClass: asset.assetClass,
       ccy: asset.ccy,
+      icon: asset.icon ?? null,
       qty: state.qty,
       avgPrice,
       price,

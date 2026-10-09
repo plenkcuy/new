@@ -228,6 +228,30 @@ export type LivePosition = {
   source: string | null;
   /** Nama stream Binance (huruf kecil) untuk crypto, mis. btcusdt. */
   stream: string | null;
+  icon: string | null;
 };
 
 export type LiveQuote = { price: number; changePct: number | null; source: string };
+
+/* ---------- Ikon aset ---------- */
+
+const PLUANG_ICONS = "https://image-cdn.pluang.com/indo-stock/light/asset-icons";
+
+/** Hanya URL https yang rapi yang boleh dipakai sebagai ikon. */
+export function safeIconUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 300 || /[\s"'<>]/.test(value)) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ikon tersimpan bila ada. Saham IDX punya pola URL tetap di CDN Pluang, jadi selalu bisa ditebak. */
+export function assetIconUrl(assetClass: AssetClass, symbol: string, stored: string | null | undefined): string | null {
+  const safe = safeIconUrl(stored);
+  if (safe) return safe;
+  if (assetClass === "idx" && /^[A-Z0-9]{2,6}$/.test(symbol)) return `${PLUANG_ICONS}/${symbol.toLowerCase()}.svg`;
+  return null;
+}

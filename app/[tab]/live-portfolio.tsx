@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Lock } from "lucide-react";
-import { StatCard, SymbolDot } from "@/components/ui";
+import { AssetIcon } from "@/components/asset-icon";
+import { StatCard } from "@/components/ui";
 import { convRate } from "@/lib/journal-calc";
 import {
   CLASS_COLOR,
@@ -281,7 +282,7 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
                 <tr key={r.assetId}>
                   <td>
                     <div className="flex items-center gap-3">
-                      <SymbolDot symbol={r.symbol} color={CLASS_COLOR[r.assetClass]} size={32} />
+                      <AssetIcon symbol={r.symbol} color={CLASS_COLOR[r.assetClass]} icon={r.icon} size={32} />
                       <div>
                         <div>{r.symbol}</div>
                         <div className="text-[11px] text-[var(--muted)]">{CLASS_LABEL[r.assetClass]}</div>

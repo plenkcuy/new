@@ -1,4 +1,5 @@
 import "server-only";
+import { safeIconUrl } from "../shared";
 import { fetchNextData, positive, type ScrapedQuote } from "./next-data";
 
 const BASE_URL = "https://reku.id/saham-as";
@@ -21,5 +22,5 @@ export async function scrapeRekuPrice(symbol: string): Promise<ScrapedQuote | nu
   const reported = price.changePercentage?.default;
   const previous = positive(price.previousClose);
   const changePct = typeof reported === "number" ? reported : previous ? (current / previous - 1) * 100 : null;
-  return { price: current, changePct };
+  return { price: current, changePct, icon: safeIconUrl(market.logo) };
 }

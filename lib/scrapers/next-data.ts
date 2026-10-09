@@ -21,7 +21,7 @@ export async function fetchNextData(url: string): Promise<Record<string, any> | 
   }
 }
 
-export type ScrapedQuote = { price: number; changePct: number | null };
+export type ScrapedQuote = { price: number; changePct: number | null; icon: string | null };
 
 export const positive = (value: unknown): number | null => {
   const n = typeof value === "string" ? Number(value) : value;

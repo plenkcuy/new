@@ -10,6 +10,7 @@ import { requireSession } from "./auth";
 import { insertTrade, removeTrade } from "./journal";
 import { parseTradeForm } from "./journal-input";
 import { refreshAssetPrices } from "./market-feed";
+import { refreshAssetIcon } from "./quotes";
 import type { JournalFormState } from "./shared";
 
 const ECHO_KEYS = ["symbol", "qty", "price", "fee", "usdIdr", "when", "stopLoss", "takeProfit", "setup", "notes", "tags", "contract", "emotion"];
@@ -34,11 +35,17 @@ export async function addTrade(_: JournalFormState, formData: FormData): Promise
   // Harga historis diambil setelah respons terkirim supaya form tidak menunggu sumber data luar.
   const { asset } = result;
   const from = parsed.value.tradedAt;
+  const { assetClass, symbol, chain } = parsed.value;
   after(async () => {
     try {
       await refreshAssetPrices(asset, from);
     } catch {
       // Jurnal tetap memakai harga transaksi bila sumber data gagal.
+    }
+    try {
+      await refreshAssetIcon({ assetId: asset.id, assetClass, symbol, chain, priceRef: asset.priceRef });
+    } catch {
+      // Tanpa ikon, tampilan memakai huruf kode aset.
     }
   });
 

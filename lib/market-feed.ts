@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "./db";
 import { DAY_MS } from "./journal-calc";
+import { safeIconUrl } from "./shared";
 
 /**
  * Sumber data harga:
@@ -47,21 +48,33 @@ async function yahooDaily(ref: string, fromMs: number): Promise<DailyClose[]> {
 }
 
 type DexResponse = {
-  pairs?: { chainId?: string; priceUsd?: string; liquidity?: { usd?: number }; priceChange?: { h24?: number } }[] | null;
+  pairs?:
+    | {
+        chainId?: string;
+        priceUsd?: string;
+        liquidity?: { usd?: number };
+        priceChange?: { h24?: number };
+        info?: { imageUrl?: string };
+      }[]
+    | null;
 };
 
 /** Harga terkini token dari pair dengan likuiditas terbesar di chain yang dipilih. */
 export async function dexScreenerQuote(
   chain: string,
   address: string,
-): Promise<{ price: number; changePct: number | null } | null> {
+): Promise<{ price: number; changePct: number | null; icon: string | null } | null> {
   const data = (await getJson(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(address)}`)) as DexResponse | null;
   const pairs = (data?.pairs ?? []).filter((p) => p.chainId === chain && Number(p.priceUsd) > 0);
   if (pairs.length === 0) return null;
   pairs.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
   const best = pairs[0];
   const change = best.priceChange?.h24;
-  return { price: Number(best.priceUsd), changePct: typeof change === "number" ? change : null };
+  return {
+    price: Number(best.priceUsd),
+    changePct: typeof change === "number" ? change : null,
+    icon: safeIconUrl(best.info?.imageUrl),
+  };
 }
 
 async function dexScreenerPrice(chain: string, address: string): Promise<number | null> {
@@ -92,6 +105,15 @@ async function saveFx(rows: DailyClose[]) {
     select u.d, u.c
     from unnest(${rows.map((r) => r.day)}::date[], ${rows.map((r) => String(r.close))}::numeric[]) as u(d, c)
     on conflict (day) do update set usd_idr = excluded.usd_idr`;
+}
+
+/** Menyimpan URL ikon aset bila berubah. */
+export async function saveAssetIcons(entries: { assetId: number; icon: string }[]) {
+  if (entries.length === 0) return;
+  await db()`
+    update journal_assets a set icon_url = u.icon
+    from unnest(${entries.map((e) => e.assetId)}::bigint[], ${entries.map((e) => e.icon)}::text[]) as u(id, icon)
+    where a.id = u.id and a.icon_url is distinct from u.icon`;
 }
 
 export type FeedAsset = {
