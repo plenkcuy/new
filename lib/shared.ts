@@ -255,3 +255,45 @@ export function assetIconUrl(assetClass: AssetClass, symbol: string, stored: str
   if (assetClass === "idx" && /^[A-Z0-9]{2,6}$/.test(symbol)) return `${PLUANG_ICONS}/${symbol.toLowerCase()}.svg`;
   return null;
 }
+
+/* ---------- Kalender PnL ---------- */
+
+export type CalendarTrade = {
+  symbol: string;
+  assetClass: AssetClass;
+  qty: number;
+  pnl: number;
+  pnlPct: number;
+  r: number | null;
+};
+
+/** Rekap satu hari (tanggal WIB). pnl = untung rugi terealisasi dari transaksi jual hari itu. */
+export type CalendarDay = {
+  pnl: number;
+  wins: number;
+  losses: number;
+  buys: number;
+  trades: CalendarTrade[];
+};
+
+/** Singkatan angka untuk sel kalender: rb, jt, M untuk IDR dan k, m, b untuk USD. */
+export function compactMoney(n: number, ccy: Ccy): string {
+  if (n === 0) return "0";
+  const abs = Math.abs(n);
+  const units: [number, string][] =
+    ccy === "IDR"
+      ? [[1e9, "M"], [1e6, "jt"], [1e3, "rb"]]
+      : [[1e9, "b"], [1e6, "m"], [1e3, "k"]];
+
+  let body = "";
+  for (const [size, suffix] of units) {
+    if (abs >= size) {
+      body = (abs / size).toFixed(1).replace(/\.0$/, "").replace(".", ",") + suffix;
+      break;
+    }
+  }
+  if (!body) body = (abs >= 100 || ccy === "IDR" ? String(Math.round(abs)) : abs.toFixed(1).replace(/\.0$/, "")).replace(".", ",");
+
+  // Tanda minus tipografis, bukan tanda hubung.
+  return (n > 0 ? "+" : "\u2212") + body;
+}

@@ -19,7 +19,7 @@ import {
 import type { TradeFormValue } from "./journal-input";
 import { getUsdIdrAt, saveAssetIcons, type FeedAsset } from "./market-feed";
 import { fetchQuotes, fetchUsdIdrLive, type QuoteTarget } from "./quotes";
-import { assetIconUrl, type AssetClass, type Ccy, type LivePosition } from "./shared";
+import { assetIconUrl, type AssetClass, type CalendarDay, type Ccy, type LivePosition } from "./shared";
 
 /* ============================================================
  * Membaca data
@@ -408,4 +408,72 @@ export async function getPortfolio(opts: {
     equity,
     liveLoaded: quotes.size > 0,
   };
+}
+
+/* ============================================================
+ * Kalender PnL
+ * ============================================================ */
+
+const WIB_MS = 7 * 60 * 60 * 1000;
+const wibDay = (ms: number) => new Date(ms + WIB_MS).toISOString().slice(0, 10);
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export type CalendarData = {
+  days: Record<string, CalendarDay>;
+  todayKey: string;
+  minMonth: string;
+  maxMonth: string;
+  /** true bila ada riwayat lebih lama yang disembunyikan karena batas paket. */
+  limited: boolean;
+};
+
+/** Untung rugi terealisasi per hari (tanggal WIB). Data di luar batas paket tidak ikut dikirim. */
+export async function getCalendar(opts: { userId: string; report: Ccy; months: number | null }): Promise<CalendarData> {
+  const rows = await loadTradeRows(opts.userId);
+  const now = Date.now();
+  const todayKey = wibDay(now);
+  const maxMonth = todayKey.slice(0, 7);
+
+  const earliest = rows.length ? wibDay(rows[0].t).slice(0, 7) : maxMonth;
+  const windowStart = opts.months === null ? earliest : shiftMonth(maxMonth, -(opts.months - 1));
+  const minMonth = windowStart < earliest ? earliest : windowStart;
+  const limited = opts.months !== null && earliest < windowStart;
+
+  const assets = new Map<number, AssetMeta>();
+  for (const r of rows) {
+    assets.set(r.assetId, { id: r.assetId, symbol: r.symbol, name: r.name, assetClass: r.assetClass, ccy: r.ccy });
+  }
+  const summary = summarize(rows, assets, buildMarket(rows, new Map(), []), opts.report, now);
+
+  const days: Record<string, CalendarDay> = {};
+  const bucket = (key: string) => (days[key] ??= { pnl: 0, wins: 0, losses: 0, buys: 0, trades: [] });
+
+  for (const c of summary.closed) {
+    const key = wibDay(c.t);
+    if (key.slice(0, 7) < minMonth) continue;
+    const day = bucket(key);
+    day.pnl += c.pnl;
+    if (c.pnl > 0) day.wins += 1;
+    else if (c.pnl < 0) day.losses += 1;
+    day.trades.push({
+      symbol: c.symbol,
+      assetClass: assets.get(c.assetId)?.assetClass ?? "idx",
+      qty: c.qty,
+      pnl: c.pnl,
+      pnlPct: c.pnlPct,
+      r: c.r,
+    });
+  }
+  for (const r of rows) {
+    if (r.side !== "buy") continue;
+    const key = wibDay(r.t);
+    if (key.slice(0, 7) >= minMonth) bucket(key).buys += 1;
+  }
+
+  return { days, todayKey, minMonth, maxMonth, limited };
 }

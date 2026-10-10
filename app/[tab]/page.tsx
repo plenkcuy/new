@@ -14,6 +14,7 @@ import type { Query, ScreenProps } from "@/lib/shared";
 import { AccountScreens } from "./account";
 import { AdminScreen } from "./admin";
 import { DashboardScreen } from "./dashboard";
+import { CalendarScreen } from "./calendar";
 import { JournalScreen } from "./journal";
 import { MarketScreen } from "./market";
 import { PortfolioScreen } from "./portfolio";
@@ -25,6 +26,7 @@ const SCREENS: Record<string, Screen> = {
   dashboard: { title: "Dashboard", render: DashboardScreen },
   portfolio: { title: "Portofolio", render: PortfolioScreen },
   journal: { title: "Jurnal", render: JournalScreen },
+  calendar: { title: "Kalender", render: CalendarScreen },
   market: { title: "Pasar", render: MarketScreen },
   analysis: { title: "Analisis", render: AnalysisScreen },
   community: { title: "Komunitas", render: CommunityScreen },

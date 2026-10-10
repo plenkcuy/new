@@ -109,14 +109,16 @@ export type TierLimits = {
   marketFeed: "delayed" | "realtime";
   /** Jumlah transaksi jurnal. null = tanpa batas. */
   journalTrades: number | null;
+  /** Jumlah bulan riwayat di kalender PnL (termasuk bulan ini). null = semua. */
+  calendarMonths: number | null;
 };
 
 const FREE_RANGES: readonly Range[] = ["1D", "1W", "1M"];
 
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
-  free: { watchlistItems: 3, chartRanges: FREE_RANGES, defaultRange: "1M", marketFeed: "delayed", journalTrades: 30 },
-  premium: { watchlistItems: 5, chartRanges: RANGES, defaultRange: "1Y", marketFeed: "realtime", journalTrades: null },
-  admin: { watchlistItems: 5, chartRanges: RANGES, defaultRange: "1Y", marketFeed: "realtime", journalTrades: null },
+  free: { watchlistItems: 3, chartRanges: FREE_RANGES, defaultRange: "1M", marketFeed: "delayed", journalTrades: 30, calendarMonths: 3 },
+  premium: { watchlistItems: 5, chartRanges: RANGES, defaultRange: "1Y", marketFeed: "realtime", journalTrades: null, calendarMonths: null },
+  admin: { watchlistItems: 5, chartRanges: RANGES, defaultRange: "1Y", marketFeed: "realtime", journalTrades: null, calendarMonths: null },
 };
 
 export const limitsFor = (tier: Tier): TierLimits => TIER_LIMITS[tier];
@@ -145,6 +147,11 @@ export function getPlanComparison(): ComparisonRow[] {
       premium: premium.journalTrades === null ? "Tanpa batas" : String(premium.journalTrades),
     },
     { label: "Analitik jurnal", free: flag("journal-analytics"), premium: yes },
+    {
+      label: "Riwayat kalender PnL",
+      free: free.calendarMonths === null ? "Semua" : `${free.calendarMonths} bulan`,
+      premium: premium.calendarMonths === null ? "Semua" : `${premium.calendarMonths} bulan`,
+    },
     { label: "Insight AI", free: flag("ai-insights"), premium: yes },
     { label: "Analisis lanjutan", free: flag("advanced-analytics"), premium: yes },
     { label: "Komunitas", free: flag("community"), premium: yes },
