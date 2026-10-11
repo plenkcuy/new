@@ -40,16 +40,18 @@ export function isRange(value: unknown): value is Range {
   return typeof value === "string" && (RANGES as readonly string[]).includes(value);
 }
 
-export type Point = { t: number; value: number };
+export type Point = { t: number; value: number; pnl?: number };
 
 export type WatchItem = {
   symbol: string;
   name: string;
-  exchange: string;
+  market: Market;
+  ccy: Ccy;
   price: number;
+  /** Perubahan harga (%). */
   change: number;
-  views: number;
-  color: string;
+  icon: string | null;
+  capLabel: string | null;
 };
 
 export type Holding = {
@@ -223,6 +225,9 @@ export type LivePosition = {
   /** Total modal dalam mata uang laporan. */
   costReport: number;
   price: number;
+  /** Nilai posisi dalam mata uang laporan. */
+  value: number;
+  unrealizedPct: number;
   changePct: number | null;
   priceFromTrade: boolean;
   source: string | null;
@@ -296,4 +301,88 @@ export function compactMoney(n: number, ccy: Ccy): string {
 
   // Tanda minus tipografis, bukan tanda hubung.
   return (n > 0 ? "+" : "\u2212") + body;
+}
+
+/* ============================================================
+ * Daftar pasar (watchlist, trending, ringkasan pasar)
+ * ============================================================ */
+
+export const MARKETS = ["idx", "us", "crypto"] as const;
+export type Market = (typeof MARKETS)[number];
+
+export function isMarket(value: unknown): value is Market {
+  return typeof value === "string" && (MARKETS as readonly string[]).includes(value);
+}
+
+export const MARKET_LABEL: Record<Market, string> = { idx: "Saham IDX", us: "Saham US", crypto: "Crypto" };
+
+/** Warna dan mata uang per pasar, dipakai ikon dan format harga. */
+export const MARKET_COLOR: Record<Market, string> = { idx: "#2dd4bf", us: "#5b8def", crypto: "#fbbf24" };
+export const MARKET_CCY: Record<Market, Ccy> = { idx: "IDR", us: "USD", crypto: "USD" };
+
+export type ListDef = {
+  key: string;
+  label: string;
+  /** Daftar sumber di database. Daftar turunan (Naik, Turun) memakai sumber yang sama. */
+  from: string;
+  derive?: "gainers" | "losers";
+  /** Nama subkategori di situs sumber (untuk scraper Pluang). */
+  sub?: string;
+};
+
+export const LIST_DEFS: Record<Market, ListDef[]> = {
+  idx: [
+    { key: "gainers", label: "Naik", from: "gainers", sub: "Gainers" },
+    { key: "losers", label: "Turun", from: "losers", sub: "Losers" },
+    { key: "mcap", label: "Terbesar", from: "mcap", sub: "Market Cap" },
+  ],
+  us: [
+    { key: "gainers", label: "Naik", from: "gainers", sub: "Gainers" },
+    { key: "losers", label: "Turun", from: "losers", sub: "Losers" },
+    { key: "mag7", label: "Magnificent 7", from: "mag7", sub: "Magnificent 7" },
+  ],
+  crypto: [
+    { key: "viewed", label: "Terpopuler", from: "viewed" },
+    { key: "gainers", label: "Naik", from: "viewed", derive: "gainers" },
+    { key: "losers", label: "Turun", from: "viewed", derive: "losers" },
+  ],
+};
+
+export type MarketItem = {
+  rank: number;
+  symbol: string;
+  name: string;
+  price: number;
+  changePct: number | null;
+  ccy: Ccy;
+  icon: string | null;
+  capLabel: string | null;
+  change7d: number | null;
+};
+
+export type WatchList = { key: string; label: string; items: WatchItem[]; locked: number };
+export type WatchMarket = { market: Market; lists: WatchList[]; updatedAt: number | null };
+
+export type OverviewItem = { name: string; value: string; changePct: number | null; group: string | null };
+
+/** Angka besar dalam satuan Indonesia: T (triliun), M (miliar), jt (juta). */
+export function compactUsd(n: number): string {
+  const abs = Math.abs(n);
+  const units: [number, string][] = [[1e12, "T"], [1e9, "M"], [1e6, "jt"]];
+  for (const [size, suffix] of units) {
+    if (abs >= size) return `$ ${(n / size).toFixed(2).replace(".", ",")} ${suffix}`;
+  }
+  return `$ ${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(n)}`;
+}
+
+/** Sumbu grafik untuk nilai rupiah atau dolar: rb, jt, M atau k, m, b. */
+export function axisMoney(v: number, ccy: Ccy): string {
+  const abs = Math.abs(v);
+  if (ccy === "IDR") {
+    if (abs >= 1e9) return `${(v / 1e9).toFixed(1).replace(".", ",")} M`;
+    if (abs >= 1e6) return `${Math.round(v / 1e6)} jt`;
+    if (abs >= 1e3) return `${Math.round(v / 1e3)} rb`;
+    return String(Math.round(v));
+  }
+  return `$${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v)}`;
 }

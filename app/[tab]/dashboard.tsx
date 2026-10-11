@@ -1,43 +1,66 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { PageHeader, SymbolDot, UpgradeCard } from "@/components/ui";
-import { getHoldings, getPerformanceSeries, getPortfolioSummary, getWatchlist } from "@/lib/data";
-import { can, limitsFor } from "@/lib/access";
-import { compactIdr, idr, isRange, num, pct, type Holding, type ScreenProps } from "@/lib/shared";
+import { AssetIcon } from "@/components/asset-icon";
+import { PageHeader, UpgradeCard } from "@/components/ui";
+import { MARKET_MAX_AGE_MS, can, limitsFor } from "@/lib/access";
+import { getPortfolio } from "@/lib/journal";
+import { RANGE_DAYS, convRate } from "@/lib/journal-calc";
+import { getWatchlistData } from "@/lib/market-lists";
+import { CLASS_COLOR, compactIdr, idr, isRange, num, pct, quantity, type LivePosition, type ScreenProps } from "@/lib/shared";
 import { PerformanceChart, Watchlist } from "./dashboard-widgets";
 
 export async function DashboardScreen({ user, query }: ScreenProps) {
   const limits = limitsFor(user.tier);
 
-  // Rentang diminta lewat URL, tapi SERVER yang memutuskan: di luar jatah tier → rentang bawaan.
+  // Rentang diminta lewat URL, tapi SERVER yang memutuskan: di luar jatah paket, pakai rentang bawaan.
   const requested = query.range;
   const range = isRange(requested) && limits.chartRanges.includes(requested) ? requested : limits.defaultRange;
+  const firstName = user.name.split(" ")[0];
 
-  const [series, summary, watchlist, holdings] = await Promise.all([
-    getPerformanceSeries(range),
-    getPortfolioSummary(),
-    getWatchlist(limits.watchlistItems),
-    getHoldings(),
+  const header = (
+    <PageHeader
+      title={
+        <>
+          Selamat datang, <span className="text-[var(--accent)]">{firstName}</span>
+        </>
+      }
+      subtitle="Ringkasan portofolio investasimu hari ini"
+    />
+  );
+
+  if (!process.env.DATABASE_URL) {
+    return (
+      <>
+        {header}
+        <section className="card p-6 text-sm leading-relaxed text-[var(--muted)]">
+          Database belum terhubung. Isi <code className="text-[var(--accent)]">DATABASE_URL</code> dengan connection string Neon,
+          lalu jalankan <code className="text-[var(--accent)]">db/001_journal.sql</code> sekali di Neon.
+        </section>
+      </>
+    );
+  }
+
+  const [portfolio, watchlist] = await Promise.all([
+    getPortfolio({
+      userId: user.id,
+      report: "IDR",
+      rangeDays: RANGE_DAYS[range],
+      premium: can(user.tier, "journal-analytics"),
+      maxAgeMs: limits.marketFeed === "realtime" ? 10_000 : 60_000,
+      liveTimeoutMs: 1800,
+    }),
+    getWatchlistData(limits.watchlistItems, MARKET_MAX_AGE_MS[limits.marketFeed]),
   ]);
 
-  const first = series[0]?.value ?? summary.total;
-  const change = ((summary.total - first) / first) * 100;
-  const firstName = user.name.split(" ")[0];
+  const chart = portfolio.equity.points.map((p) => ({ t: p.t, value: p.value, pnl: p.pnl }));
 
   return (
     <>
-      <PageHeader
-        title={
-          <>
-            Selamat datang, <span className="text-[var(--accent)]">{firstName}</span>
-          </>
-        }
-        subtitle="Ringkasan portofolio investasimu hari ini"
-      />
+      {header}
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-[1fr_1.05fr_1fr]">
         <div className="flex flex-col gap-5">
-          <TotalHolding total={summary.total} change={change} rangeLabel={range} />
+          <TotalHolding value={portfolio.totals.value} unrealizedPct={portfolio.totals.unrealizedPct} hasTrades={portfolio.totalTrades > 0} />
           {can(user.tier, "ai-insights") ? (
             <AiInsights />
           ) : (
@@ -51,33 +74,44 @@ export async function DashboardScreen({ user, query }: ScreenProps) {
           )}
         </div>
 
-        <Watchlist items={watchlist.items} lockedCount={watchlist.lockedCount} />
+        <Watchlist markets={watchlist} />
 
         <div className="md:col-span-2 xl:col-span-1">
-          <PortfolioCard holdings={holdings} />
+          <PortfolioCard positions={portfolio.positions} usdIdr={portfolio.usdIdr} />
         </div>
       </div>
 
-      <PerformanceChart data={series} range={range} allowedRanges={limits.chartRanges} />
+      <PerformanceChart data={chart} range={range} allowedRanges={limits.chartRanges} />
     </>
   );
 }
 
 /* ---------- Kartu khusus dashboard (server component) ---------- */
 
-function TotalHolding({ total, change, rangeLabel }: { total: number; change: number; rangeLabel: string }) {
+function TotalHolding({ value, unrealizedPct, hasTrades }: { value: number; unrealizedPct: number; hasTrades: boolean }) {
   return (
     <section className="card-glow flex flex-col justify-between p-6" style={{ minHeight: 160 }}>
       <div className="flex items-center justify-between">
-        <h2 className="text-lg">Total Aset</h2>
-        <span className="pill">{rangeLabel}</span>
+        <h2 className="text-lg">Nilai Portofolio</h2>
+        <Link href="/portfolio" className="pill">
+          Rincian
+        </Link>
       </div>
 
       <div className="mt-6">
-        <div className="text-3xl font-medium tracking-tight sm:text-[34px]">{idr(total)}</div>
-        <div className={`mt-1 text-sm ${change >= 0 ? "up" : "down"}`}>
-          {pct(change)} <span className="text-[var(--muted)]">dalam {rangeLabel}</span>
-        </div>
+        <div className="text-3xl font-medium tracking-tight sm:text-[34px]">{idr(value)}</div>
+        {hasTrades ? (
+          <div className={`mt-1 text-sm ${unrealizedPct >= 0 ? "up" : "down"}`}>
+            {pct(unrealizedPct)} <span className="text-[var(--muted)]">untung rugi dari modal</span>
+          </div>
+        ) : (
+          <div className="mt-1 text-sm text-[var(--muted)]">
+            Belum ada transaksi.{" "}
+            <Link href="/journal" className="text-[var(--accent)] hover:underline">
+              Catat di Jurnal
+            </Link>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -111,7 +145,12 @@ function AiInsights() {
 }
 
 /** Ringkasan 4 posisi terbesar. Rincian lengkap ada di /portfolio. */
-function PortfolioCard({ holdings }: { holdings: Holding[] }) {
+function PortfolioCard({ positions, usdIdr }: { positions: LivePosition[]; usdIdr: number }) {
+  const top = positions
+    .map((p) => ({ ...p, idrValue: p.qty * p.price * convRate(p.ccy, "IDR", usdIdr) }))
+    .sort((a, b) => b.idrValue - a.idrValue)
+    .slice(0, 4);
+
   return (
     <section className="card p-6">
       <div className="flex items-center justify-between">
@@ -126,24 +165,34 @@ function PortfolioCard({ holdings }: { holdings: Holding[] }) {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        {holdings.slice(0, 4).map((h) => (
-          <article
-            key={h.symbol}
-            className="flex flex-col rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] p-4"
-          >
-            <div className="text-base font-medium">{compactIdr(h.units * h.price)}</div>
-            <div className={`text-[11px] ${h.change >= 0 ? "up" : "down"}`}>{pct(h.change)}</div>
-            <div className="mt-4">
-              <SymbolDot symbol={h.symbol} color={h.color} size={32} />
-            </div>
-            <div className="mt-3 flex items-center justify-between text-[11px] text-[var(--muted)]">
-              <span className="text-[var(--text)]">{h.symbol}</span>
-              <span>{num(h.units)} lembar</span>
-            </div>
-          </article>
-        ))}
-      </div>
+      {top.length === 0 ? (
+        <p className="mt-4 text-sm text-[var(--muted)]">
+          Belum ada posisi. Catat transaksi beli di{" "}
+          <Link href="/journal" className="text-[var(--accent)] hover:underline">
+            Jurnal
+          </Link>{" "}
+          dan posisimu muncul di sini.
+        </p>
+      ) : (
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          {top.map((h) => (
+            <article
+              key={h.assetId}
+              className="flex flex-col rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] p-4"
+            >
+              <div className="text-base font-medium">{compactIdr(h.idrValue)}</div>
+              <div className={`text-[11px] ${h.unrealizedPct >= 0 ? "up" : "down"}`}>{pct(h.unrealizedPct)}</div>
+              <div className="mt-4">
+                <AssetIcon symbol={h.symbol} color={CLASS_COLOR[h.assetClass]} icon={h.icon} size={32} />
+              </div>
+              <div className="mt-3 flex items-center justify-between text-[11px] text-[var(--muted)]">
+                <span className="text-[var(--text)]">{h.symbol}</span>
+                <span>{h.assetClass === "idx" ? `${num(h.qty / 100)} lot` : quantity(h.qty)}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

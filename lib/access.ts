@@ -85,6 +85,9 @@ export function safeNext(value: string | null | undefined, fallback = "/dashboar
  * ============================================================ */
 
 /** Tier minimum untuk tiap fitur. */
+/** Umur data pasar sebelum diperbarui: paket tertunda 15 menit, realtime 5 menit. */
+export const MARKET_MAX_AGE_MS = { delayed: 15 * 60 * 1000, realtime: 5 * 60 * 1000 } as const;
+
 export const FEATURE_MIN_TIER = {
   "ai-insights": "premium",
   "advanced-analytics": "premium",

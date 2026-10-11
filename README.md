@@ -123,6 +123,7 @@ Catatan transaksi disimpan di Neon (`db/001_journal.sql`: aset, transaksi, harga
 - Rumus ada di `lib/journal-calc.ts`: harga rata rata bergerak, untung rugi terealisasi dan belum, TWR, drawdown, win rate, profit factor, expectancy, kelipatan R.
 - Harga: Yahoo Finance (IDX, US, crypto besar) dan DexScreener (meme coin, lewat alamat kontrak), diperbarui harian oleh cron di `vercel.json`. Bila data pasar belum ada, jurnal memakai harga transaksi terakhir dan menandainya.
 - Portofolio (`/portfolio`) dihitung dari jurnal dan dinilai dengan harga terkini: Binance (crypto), Pluang (saham IDX), Reku (saham US), DexScreener (meme coin). Premium mendapat WebSocket Binance langsung di browser, Free memakai polling 60 detik. Scraper ada di `lib/scrapers/` dan bergantung pada struktur `__NEXT_DATA__` situs sumber, jadi cek bila harga berhenti muncul.
+- Watchlist dan Pasar memakai daftar hasil scraper yang disimpan di Neon (`market_lists`): Pluang Explore (saham IDX dan US) dan CoinMarketCap (crypto), kode di `lib/scrapers/` dan `lib/market-lists.ts`. Data dibaca dari database. Bila lebih tua dari 15 menit (Free) atau 5 menit (Premium), data lama tetap tampil dan pembaruan jalan di belakang. Cron harian ikut memanaskan semua daftar. Dashboard, Portofolio, dan Analisis dihitung dari jurnal. Hanya Komunitas dan Admin yang masih data tiruan.
 - Fee bawaan per jenis aset ada di `FEE_DEFAULTS` (`lib/journal-input.ts`), isi kolom fee untuk angka sebenarnya dari brokermu.
 - Batas paket: `journalTrades` dan fitur `journal-analytics` di `lib/access.ts`.
 

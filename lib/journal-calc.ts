@@ -254,7 +254,7 @@ export type Summary = {
   };
   byClass: { assetClass: AssetClass; value: number; share: number }[];
   /** Untung rugi total (terealisasi + belum) per aset, termasuk aset yang sudah habis dijual. */
-  pnlByAsset: { symbol: string; pnl: number }[];
+  pnlByAsset: { symbol: string; name: string; pnl: number; pnlPct: number }[];
 };
 
 const STALE_AFTER_MS = 4 * DAY_MS;
@@ -268,6 +268,7 @@ export function summarize(
 ): Summary {
   const states = new Map<number, PositionState>();
   const closed: ClosedTrade[] = [];
+  const bought = new Map<number, number>();
 
   for (const tr of sortTrades(trades)) {
     const asset = assets.get(tr.assetId);
@@ -276,6 +277,10 @@ export function summarize(
     states.set(tr.assetId, state);
     const result = applyTrade(state, tr, asset.ccy, report);
     if (result) closed.push(result);
+    if (tr.side === "buy") {
+      const spent = (tr.qty * tr.price + tr.fee) * convRate(asset.ccy, report, tr.usdIdr);
+      bought.set(tr.assetId, (bought.get(tr.assetId) ?? 0) + spent);
+    }
   }
 
   const usdIdrNow = markAt(market.fx, now) ?? 1;
@@ -330,7 +335,15 @@ export function summarize(
   const pnlByAssetMap = new Map<number, number>(realizedByAsset);
   for (const p of positions) pnlByAssetMap.set(p.assetId, (pnlByAssetMap.get(p.assetId) ?? 0) + p.unrealized);
   const pnlByAsset = [...pnlByAssetMap.entries()]
-    .map(([assetId, pnl]) => ({ symbol: assets.get(assetId)?.symbol ?? "?", pnl }))
+    .map(([assetId, pnl]) => {
+      const invested = bought.get(assetId) ?? 0;
+      return {
+        symbol: assets.get(assetId)?.symbol ?? "?",
+        name: assets.get(assetId)?.name ?? "",
+        pnl,
+        pnlPct: invested > 0 ? (pnl / invested) * 100 : 0,
+      };
+    })
     .sort((a, b) => b.pnl - a.pnl);
 
   return {

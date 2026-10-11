@@ -54,3 +54,25 @@ create table if not exists journal_fx (
   day     date primary key,
   usd_idr numeric(20, 6) not null check (usd_idr > 0)
 );
+
+-- Daftar pasar hasil scraper (watchlist, trending, ringkasan pasar).
+create table if not exists market_lists (
+  market     text not null check (market in ('idx', 'us', 'crypto')),
+  list_key   text not null,
+  rank       int  not null,
+  symbol     text not null,
+  name       text,
+  price      numeric(38, 18),
+  change_pct numeric(14, 4),
+  extra      jsonb not null default '{}',
+  updated_at timestamptz not null default now(),
+  primary key (market, list_key, rank)
+);
+
+create table if not exists market_list_state (
+  market           text not null,
+  list_key         text not null,
+  fetched_at       timestamptz,
+  refreshing_until timestamptz,
+  primary key (market, list_key)
+);

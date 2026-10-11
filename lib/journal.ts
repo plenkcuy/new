@@ -19,7 +19,7 @@ import {
 import type { TradeFormValue } from "./journal-input";
 import { getUsdIdrAt, saveAssetIcons, type FeedAsset } from "./market-feed";
 import { fetchQuotes, fetchUsdIdrLive, type QuoteTarget } from "./quotes";
-import { assetIconUrl, type AssetClass, type CalendarDay, type Ccy, type LivePosition } from "./shared";
+import { CLASS_LABEL, assetIconUrl, type AssetClass, type CalendarDay, type Ccy, type LivePosition } from "./shared";
 
 /* ============================================================
  * Membaca data
@@ -330,6 +330,7 @@ const withTimeout = <T,>(job: Promise<T>, ms: number, fallback: T) =>
 
 export type PortfolioData = {
   totalTrades: number;
+  totals: Summary["totals"];
   positions: LivePosition[];
   realized: number;
   usdIdr: number;
@@ -344,6 +345,8 @@ export async function getPortfolio(opts: {
   rangeDays: number;
   premium: boolean;
   maxAgeMs: number;
+  /** Batas tunggu harga terkini. Dashboard memakai batas pendek agar halaman cepat. */
+  liveTimeoutMs?: number;
 }): Promise<PortfolioData> {
   const rows = await loadTradeRows(opts.userId);
 
@@ -357,8 +360,8 @@ export async function getPortfolio(opts: {
 
   const targets = openTargets(rows);
   const [quotes, usdIdrLive] = await Promise.all([
-    withTimeout(fetchQuotes(targets, opts.maxAgeMs), 3500, new Map()),
-    withTimeout(fetchUsdIdrLive(opts.maxAgeMs), 3500, null),
+    withTimeout(fetchQuotes(targets, opts.maxAgeMs), opts.liveTimeoutMs ?? 3500, new Map()),
+    withTimeout(fetchUsdIdrLive(opts.maxAgeMs), opts.liveTimeoutMs ?? 3500, null),
   ]);
 
   const now = Date.now();
@@ -381,6 +384,8 @@ export async function getPortfolio(opts: {
       avgPrice: p.avgPrice,
       costReport: p.cost,
       price: p.price,
+      value: p.value,
+      unrealizedPct: p.unrealizedPct,
       changePct: quote?.changePct ?? null,
       priceFromTrade: p.priceFromTrade,
       source: quote?.source ?? null,
@@ -402,6 +407,7 @@ export async function getPortfolio(opts: {
   const fxMarks = market.fx;
   return {
     totalTrades: rows.length,
+    totals: summary.totals,
     positions,
     realized: summary.totals.realized,
     usdIdr: fxMarks.length ? fxMarks[fxMarks.length - 1].v : 1,
@@ -476,4 +482,71 @@ export async function getCalendar(opts: { userId: string; report: Ccy; months: n
   }
 
   return { days, todayKey, minMonth, maxMonth, limited };
+}
+
+/* ============================================================
+ * Analisis risiko dan kinerja dari jurnal (rupiah)
+ * ============================================================ */
+
+export type JournalAnalytics = {
+  /** Jumlah hari data sejak transaksi pertama. */
+  days: number;
+  returnLabel: string;
+  periodReturn: number;
+  /** null bila data kurang dari 10 hari. */
+  volatility: number | null;
+  /** null bila data kurang dari 90 hari (return jangka pendek yang ditahunkan menyesatkan). */
+  sharpe: number | null;
+  maxDrawdown: number;
+  classes: { label: string; value: number; share: number }[];
+  contributors: { symbol: string; name: string; pnl: number; pnlPct: number }[];
+};
+
+const RISK_FREE_PCT = 6;
+const YEAR_DAYS = 365;
+const SHARPE_MIN_DAYS = 90;
+
+/** Return TWR, volatilitas, Sharpe, drawdown, alokasi, dan kontributor, semuanya dari jurnal. */
+export async function getAnalytics(userId: string): Promise<JournalAnalytics> {
+  const rows = await loadTradeRows(userId);
+
+  const assets = new Map<number, AssetMeta>();
+  for (const r of rows) {
+    assets.set(r.assetId, { id: r.assetId, symbol: r.symbol, name: r.name, assetClass: r.assetClass, ccy: r.ccy });
+  }
+  const [priceRows, fxRows] = await Promise.all([loadPriceRows([...assets.keys()]), loadFxRows()]);
+  const market = buildMarket(rows, priceRows, fxRows);
+
+  const now = Date.now();
+  const endDay = dayFloor(now);
+  const summary = summarize(rows, assets, market, "IDR", now);
+  const all = sliceEquity(buildEquity(rows, assets, market, "IDR", endDay), 36_500, endDay, true);
+
+  const index = all.points.map((p) => 1 + (p.twr ?? 0) / 100);
+  const daily = index.slice(1).map((v, i) => v / index[i] - 1);
+  const days = all.points.length;
+
+  const mean = daily.length ? daily.reduce((a, b) => a + b, 0) / daily.length : 0;
+  const stdev = daily.length ? Math.sqrt(daily.reduce((a, r) => a + (r - mean) ** 2, 0) / daily.length) : 0;
+  const volatility = days >= 10 ? stdev * Math.sqrt(YEAR_DAYS) * 100 : null;
+
+  const yearly = days >= YEAR_DAYS ? sliceEquity(buildEquity(rows, assets, market, "IDR", endDay), YEAR_DAYS, endDay, true) : all;
+  const periodReturn = yearly.twr;
+
+  let sharpe: number | null = null;
+  if (days >= SHARPE_MIN_DAYS && volatility && volatility > 0) {
+    const annualized = ((1 + all.twr / 100) ** (YEAR_DAYS / days) - 1) * 100;
+    sharpe = (annualized - RISK_FREE_PCT) / volatility;
+  }
+
+  return {
+    days,
+    returnLabel: days >= YEAR_DAYS ? "Return 1 tahun" : `Return sejak mulai (${days} hari)`,
+    periodReturn,
+    volatility,
+    sharpe,
+    maxDrawdown: all.maxDrawdown,
+    classes: summary.byClass.map((c) => ({ label: CLASS_LABEL[c.assetClass], value: c.value, share: c.share })),
+    contributors: summary.pnlByAsset,
+  };
 }

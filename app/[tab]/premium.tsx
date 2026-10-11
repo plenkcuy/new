@@ -3,55 +3,98 @@
  * (berdasarkan ROUTE_RULES di lib/access.ts) sebelum fungsi di sini dipanggil.
  */
 import { Heart, MessageCircle } from "lucide-react";
+import Link from "next/link";
 import { PageHeader, StatCard } from "@/components/ui";
-import { getAnalytics, getPosts, getTrendingTopics } from "@/lib/data";
+import { getPosts, getTrendingTopics } from "@/lib/data";
+import { getAnalytics } from "@/lib/journal";
 import { decimal, idr, pct, type ScreenProps } from "@/lib/shared";
 
-export async function AnalysisScreen(_: ScreenProps) {
-  const a = await getAnalytics();
+export async function AnalysisScreen({ user }: ScreenProps) {
+  const header = <PageHeader title="Analisis" subtitle="Risiko, kinerja, dan alokasi portofoliomu" />;
+
+  if (!process.env.DATABASE_URL) {
+    return (
+      <>
+        {header}
+        <section className="card p-6 text-sm leading-relaxed text-[var(--muted)]">
+          Database belum terhubung. Isi <code className="text-[var(--accent)]">DATABASE_URL</code> dengan connection string Neon,
+          lalu jalankan <code className="text-[var(--accent)]">db/001_journal.sql</code> sekali di Neon.
+        </section>
+      </>
+    );
+  }
+
+  const a = await getAnalytics(user.id);
+
+  if (a.days === 0) {
+    return (
+      <>
+        {header}
+        <section className="card p-6 text-sm leading-relaxed text-[var(--muted)]">
+          Belum ada data. Catat transaksi di halaman{" "}
+          <Link href="/journal" className="text-[var(--accent)] hover:underline">
+            Jurnal
+          </Link>{" "}
+          dan analisis risiko serta kinerja terisi otomatis.
+        </section>
+      </>
+    );
+  }
 
   return (
     <>
-      <PageHeader title="Analisis" subtitle="Risiko, kinerja, dan alokasi portofoliomu" />
+      {header}
 
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Return 1 tahun" value={pct(a.annualReturn)} tone={a.annualReturn >= 0 ? "up" : "down"} />
-        <StatCard label="Volatilitas tahunan" value={`${decimal(a.volatility)}%`} hint="Simpangan baku return mingguan" />
-        <StatCard label="Rasio Sharpe" value={decimal(a.sharpe)} hint="Acuan bebas risiko 6%" />
+        <StatCard label={a.returnLabel} value={pct(a.periodReturn)} tone={a.periodReturn >= 0 ? "up" : "down"} hint="Tidak terpengaruh tambahan modal" />
+        <StatCard
+          label="Volatilitas tahunan"
+          value={a.volatility === null ? "Butuh 10 hari data" : `${decimal(a.volatility)}%`}
+          hint="Simpangan baku return harian"
+        />
+        <StatCard
+          label="Rasio Sharpe"
+          value={a.sharpe === null ? "Butuh 90 hari data" : decimal(a.sharpe)}
+          hint="Acuan bebas risiko 6%"
+        />
         <StatCard label="Penurunan maksimum" value={`${decimal(a.maxDrawdown)}%`} tone="down" hint="Dari puncak ke lembah" />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
         <section className="card p-6">
-          <h2 className="text-lg">Alokasi per sektor</h2>
-          <ul className="mt-5 flex flex-col gap-4">
-            {a.sectors.map((s) => (
-              <li key={s.label}>
-                <div className="flex items-baseline justify-between text-sm">
-                  <span>{s.label}</span>
-                  <span className="text-[var(--muted)]">
-                    {decimal(s.share, 1)}% · {idr(s.value)}
-                  </span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-white/10">
-                  <div
-                    className="h-2 rounded-full"
-                    style={{ width: `${s.share}%`, background: "linear-gradient(90deg,#14b8a6,#5eead4)" }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
+          <h2 className="text-lg">Alokasi per jenis aset</h2>
+          {a.classes.length === 0 ? (
+            <p className="mt-4 text-sm text-[var(--muted)]">Belum ada posisi terbuka.</p>
+          ) : (
+            <ul className="mt-5 flex flex-col gap-4">
+              {a.classes.map((s) => (
+                <li key={s.label}>
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span>{s.label}</span>
+                    <span className="text-[var(--muted)]">
+                      {decimal(s.share, 1)}% · {idr(s.value)}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-white/10">
+                    <div
+                      className="h-2 rounded-full"
+                      style={{ width: `${s.share}%`, background: "linear-gradient(90deg,#14b8a6,#5eead4)" }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section className="card overflow-x-auto">
-          <h2 className="p-6 pb-2 text-lg">Kontributor untung/rugi</h2>
+          <h2 className="p-6 pb-2 text-lg">Kontributor untung rugi</h2>
           <table className="data-table">
             <thead>
               <tr>
-                <th>Saham</th>
-                <th className="num">Untung/rugi</th>
-                <th className="num">%</th>
+                <th>Aset</th>
+                <th className="num">Untung rugi</th>
+                <th className="num">% dari modal</th>
               </tr>
             </thead>
             <tbody>
@@ -70,7 +113,9 @@ export async function AnalysisScreen(_: ScreenProps) {
         </section>
       </div>
 
-      <p className="text-xs text-[var(--muted)]">Dihitung dari data tiruan untuk demo UI. Bukan saran investasi.</p>
+      <p className="text-xs text-[var(--muted)]">
+        Dihitung dari transaksi di jurnalmu, dalam rupiah. Return memakai TWR harian. Bukan saran investasi.
+      </p>
     </>
   );
 }

@@ -23,6 +23,7 @@ import { deniedRedirect } from "@/lib/access";
 import {
   JOURNAL_METRICS,
   METRIC_LABEL,
+  axisMoney,
   RANGES,
   decimal,
   money,
@@ -35,17 +36,6 @@ import {
 
 const dayFmt = (t: number, options: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat("id-ID", { ...options, timeZone: "UTC" }).format(t);
-
-function axisMoney(v: number, ccy: Ccy): string {
-  const abs = Math.abs(v);
-  if (ccy === "IDR") {
-    if (abs >= 1e9) return `${(v / 1e9).toFixed(1).replace(".", ",")} M`;
-    if (abs >= 1e6) return `${Math.round(v / 1e6)} jt`;
-    if (abs >= 1e3) return `${Math.round(v / 1e3)} rb`;
-    return String(Math.round(v));
-  }
-  return `$${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v)}`;
-}
 
 function formatMetric(v: number, metric: JournalMetric, ccy: Ccy): string {
   if (metric === "twr") return pct(v, 2);

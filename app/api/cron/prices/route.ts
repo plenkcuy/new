@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { refreshAllLists } from "@/lib/market-lists";
 import { refreshEverything } from "@/lib/market-feed";
 
 export const maxDuration = 60;
@@ -19,7 +20,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    return NextResponse.json(await refreshEverything(), { headers: { "Cache-Control": "no-store" } });
+    const [prices, lists] = await Promise.all([refreshEverything(), refreshAllLists()]);
+    return NextResponse.json({ ...prices, marketLists: lists }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ error: "refresh_failed" }, { status: 500 });
   }
