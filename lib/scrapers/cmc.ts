@@ -1,6 +1,6 @@
 import "server-only";
 import { compactUsd, type MarketItem, type OverviewItem } from "../shared";
-import { fetchNextData, toNumber } from "./next-data";
+import { fetchNextDataDetailed, toNumber } from "./next-data";
 import type { ExploreResult } from "./pluang-explore";
 
 const URL = "https://coinmarketcap.com/most-viewed-pages/";
@@ -21,9 +21,10 @@ const percent = (value: unknown) => {
 };
 
 /** Koin yang paling banyak dilihat di CoinMarketCap (struktur sama dengan scraper crypto milikmu). */
-export async function scrapeCmcMostViewed(): Promise<ExploreResult | null> {
-  const data = await fetchNextData(URL);
-  if (!data) return null;
+export async function scrapeCmcMostViewed(): Promise<ExploreResult> {
+  const outcome = await fetchNextDataDetailed(URL);
+  if (!outcome.data) throw new Error(outcome.error ?? "gagal mengambil halaman");
+  const data = outcome.data;
 
   const queries: { queryKey?: unknown[]; state?: { data?: { list?: Coin[] } } }[] = data.props?.dehydratedState?.queries ?? [];
   const list = queries.find((q) => Array.isArray(q?.queryKey) && q.queryKey[0] === "most-visited")?.state?.data?.list ?? [];
@@ -47,7 +48,7 @@ export async function scrapeCmcMostViewed(): Promise<ExploreResult | null> {
     });
     if (items.length >= MAX_ITEMS) break;
   }
-  if (items.length === 0) return null;
+  if (items.length === 0) throw new Error("tidak ada koin yang terbaca dari halaman (struktur berubah?)");
 
   const gm = data.props?.pageProps?.globalMetrics;
   const overview: OverviewItem[] = [];
@@ -62,5 +63,5 @@ export async function scrapeCmcMostViewed(): Promise<ExploreResult | null> {
     if (eth) overview.push({ name: "Dominasi ETH", value: `${eth.toFixed(2).replace(".", ",")}%`, changePct: null, group: "Crypto" });
   }
 
-  return { items, overview };
+  return { items, overview, via: outcome.via ?? "axios" };
 }

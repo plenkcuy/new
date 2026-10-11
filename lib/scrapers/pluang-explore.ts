@@ -1,6 +1,6 @@
 import "server-only";
 import { assetIconUrl, compactUsd, safeIconUrl, type MarketItem, type OverviewItem } from "../shared";
-import { fetchNextData, toNumber } from "./next-data";
+import { fetchNextDataDetailed, toNumber } from "./next-data";
 
 type Market = "idx" | "us";
 
@@ -13,7 +13,13 @@ const SYMBOL: Record<Market, RegExp> = { idx: /^[A-Z0-9]{2,6}$/, us: /^[A-Z.]{1,
 const MAX_ITEMS = 20;
 const MAX_OVERVIEW = 12;
 
-export type ExploreResult = { items: MarketItem[]; overview: OverviewItem[] };
+export type ExploreResult = { items: MarketItem[]; overview: OverviewItem[]; via: "axios" | "puppeteer" };
+
+/** "Rp9.850" atau "$132.50" menjadi angka. */
+const fromDisplay = (value: unknown): number | null => {
+  const match = String(value ?? "").match(/[\d.,]+/);
+  return match ? toNumber(match[0]) : null;
+};
 
 function iconOf(market: Market, symbol: string, raw: unknown): string | null {
   if (typeof raw === "string" && raw) {
@@ -31,12 +37,17 @@ function capLabelOf(value: unknown): string | null {
   return typeof value === "string" && value.length <= 24 ? value : null;
 }
 
-/** Daftar saham dari halaman Explore Pluang (struktur sama dengan scraper watchlist milikmu). */
-export async function scrapePluangExplore(market: Market, subCategory: string): Promise<ExploreResult | null> {
+/**
+ * Daftar saham dari halaman Explore Pluang (struktur sama dengan scraper watchlist milikmu).
+ * Melempar Error dengan alasan yang jelas bila gagal.
+ */
+export async function scrapePluangExplore(market: Market, subCategory: string): Promise<ExploreResult> {
   const query = new URLSearchParams({ subCategory });
   if (market === "idx") query.set("page", "1");
-  const data = (await fetchNextData(`${URLS[market]}?${query}`))?.props?.pageProps?.data;
-  if (!data) return null;
+  const outcome = await fetchNextDataDetailed(`${URLS[market]}?${query}`);
+  if (!outcome.data) throw new Error(outcome.error ?? "gagal mengambil halaman");
+  const data = outcome.data.props?.pageProps?.data;
+  if (!data) throw new Error("struktur halaman berubah (pageProps.data tidak ada)");
 
   const items: MarketItem[] = [];
   for (const category of data.assetCategories ?? []) {
@@ -46,7 +57,7 @@ export async function scrapePluangExplore(market: Market, subCategory: string): 
         const quote = asset.display?.lastPriceAndPercentageChange ?? {};
 
         const symbol = String((market === "idx" ? tile.symbol ?? tile.displaySymbol : tile.displaySymbol ?? tile.symbol) ?? "").toUpperCase();
-        const price = toNumber(quote.currentPrice);
+        const price = toNumber(quote.currentPrice) ?? fromDisplay(quote.currentPriceDisplay);
         if (!SYMBOL[market].test(symbol) || price === null || price <= 0) continue;
 
         items.push({
@@ -54,7 +65,7 @@ export async function scrapePluangExplore(market: Market, subCategory: string): 
           symbol,
           name: String(tile.name ?? symbol).slice(0, 80),
           price,
-          changePct: toNumber(quote.percentageChange),
+          changePct: toNumber(quote.percentageChange) ?? toNumber(quote.percentageDisplay),
           ccy: market === "idx" ? "IDR" : "USD",
           icon: iconOf(market, symbol, tile.icon),
           capLabel: market === "us" ? capLabelOf(asset.display?.marketCap?.value) : null,
@@ -64,7 +75,7 @@ export async function scrapePluangExplore(market: Market, subCategory: string): 
       }
     }
   }
-  if (items.length === 0) return null;
+  if (items.length === 0) throw new Error("tidak ada aset yang terbaca dari halaman (struktur berubah?)");
 
   const overview: OverviewItem[] = [];
   for (const category of data.marketOverviewResult?.assetCategoryData ?? []) {
@@ -80,5 +91,5 @@ export async function scrapePluangExplore(market: Market, subCategory: string): 
     }
   }
 
-  return { items, overview };
+  return { items, overview, via: outcome.via ?? "axios" };
 }

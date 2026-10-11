@@ -1,4 +1,7 @@
 import "server-only";
+import axios from "axios";
+import * as cheerio from "cheerio";
+import { fetchWithBrowser } from "./browser";
 
 const HEADERS = {
   "User-Agent":
@@ -7,18 +10,63 @@ const HEADERS = {
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 };
 
-const NEXT_DATA = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/;
+export type NextDataResult = {
+  data: Record<string, any> | null;
+  via: "axios" | "puppeteer" | null;
+  error: string | null;
+};
 
-/** Mengambil JSON __NEXT_DATA__ dari halaman Next.js. null bila gagal atau strukturnya berubah. */
-export async function fetchNextData(url: string): Promise<Record<string, any> | null> {
+function readNextData(html: string): Record<string, any> | null {
+  const raw = cheerio.load(html)("script#__NEXT_DATA__").html();
+  if (!raw) return null;
   try {
-    const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(9000), cache: "no-store" });
-    if (!res.ok) return null;
-    const match = (await res.text()).match(NEXT_DATA);
-    return match ? JSON.parse(match[1]) : null;
+    return JSON.parse(raw);
   } catch {
     return null;
   }
+}
+
+function describe(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    if (err.response) return `HTTP ${err.response.status}`;
+    return err.code === "ECONNABORTED" ? "timeout" : (err.code ?? err.message);
+  }
+  return err instanceof Error ? err.message.slice(0, 160) : "gagal";
+}
+
+/**
+ * Mengambil __NEXT_DATA__ seperti scraper aslinya: axios + cheerio (timeout 20 detik).
+ * Bila gagal dan `browser` true, dicoba ulang lewat Puppeteer.
+ */
+export async function fetchNextDataDetailed(
+  url: string,
+  opts: { timeoutMs?: number; browser?: boolean } = {},
+): Promise<NextDataResult> {
+  let error: string;
+  try {
+    const res = await axios.get<string>(url, {
+      headers: HEADERS,
+      timeout: opts.timeoutMs ?? 20_000,
+      responseType: "text",
+      transformResponse: [(body) => body],
+    });
+    const data = readNextData(String(res.data));
+    if (data) return { data, via: "axios", error: null };
+    error = "tag __NEXT_DATA__ tidak ditemukan";
+  } catch (err) {
+    error = describe(err);
+  }
+
+  if (opts.browser === false) return { data: null, via: null, error };
+
+  const browser = await fetchWithBrowser(url);
+  if (browser.data) return { data: browser.data, via: "puppeteer", error: null };
+  return { data: null, via: null, error: `axios: ${error}; puppeteer: ${browser.error}` };
+}
+
+/** Versi ringkas untuk harga satuan: tanpa Puppeteer agar kutipan tetap cepat. */
+export async function fetchNextData(url: string): Promise<Record<string, any> | null> {
+  return (await fetchNextDataDetailed(url, { timeoutMs: 15_000, browser: false })).data;
 }
 
 export type ScrapedQuote = { price: number; changePct: number | null; icon: string | null };

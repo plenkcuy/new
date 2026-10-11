@@ -361,7 +361,7 @@ export type MarketItem = {
 };
 
 export type WatchList = { key: string; label: string; items: WatchItem[]; locked: number };
-export type WatchMarket = { market: Market; lists: WatchList[]; updatedAt: number | null };
+export type WatchMarket = { market: Market; lists: WatchList[]; updatedAt: number | null; failed: boolean };
 
 export type OverviewItem = { name: string; value: string; changePct: number | null; group: string | null };
 

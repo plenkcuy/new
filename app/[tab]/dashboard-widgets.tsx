@@ -72,7 +72,11 @@ export function Watchlist({ markets }: { markets: WatchMarket[] }) {
       <ul className="mt-3 flex-1 divide-y divide-[var(--line)]">
         {(list?.items.length ?? 0) === 0 && (
           <li className="py-6 text-sm text-[var(--muted)]">
-            {current.updatedAt ? "Tidak ada aset di daftar ini." : "Data pasar sedang dimuat. Muat ulang beberapa detik lagi."}
+            {current.failed
+              ? "Sumber data sedang tidak bisa dijangkau. Dicoba lagi otomatis."
+              : current.updatedAt
+                ? "Tidak ada aset di daftar ini."
+                : "Data pasar sedang dimuat. Muat ulang beberapa detik lagi."}
           </li>
         )}
         {list?.items.map((i) => (

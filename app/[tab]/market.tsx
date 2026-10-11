@@ -88,7 +88,11 @@ export async function MarketScreen({ user, query }: ScreenProps) {
       <section className="card overflow-x-auto">
         {page.items.length === 0 ? (
           <p className="p-6 text-sm text-[var(--muted)]">
-            {page.updatedAt ? "Tidak ada aset di daftar ini." : "Data pasar sedang dimuat. Muat ulang beberapa detik lagi."}
+            {page.failed
+              ? "Sumber data sedang tidak bisa dijangkau. Dicoba lagi otomatis."
+              : page.updatedAt
+                ? "Tidak ada aset di daftar ini."
+                : "Data pasar sedang dimuat. Muat ulang beberapa detik lagi."}
           </p>
         ) : (
           <table className="data-table">

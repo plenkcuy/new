@@ -74,5 +74,11 @@ create table if not exists market_list_state (
   list_key         text not null,
   fetched_at       timestamptz,
   refreshing_until timestamptz,
+  last_error       text,
+  last_via         text,
   primary key (market, list_key)
 );
+
+-- Untuk database yang sudah menjalankan versi sebelumnya.
+alter table market_list_state add column if not exists last_error text;
+alter table market_list_state add column if not exists last_via text;

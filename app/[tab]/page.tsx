@@ -22,6 +22,9 @@ import { AnalysisScreen, CommunityScreen } from "./premium";
 
 type Screen = { title: string; render: (props: ScreenProps) => Promise<React.ReactNode> };
 
+// Scrape daftar pasar berjalan lewat after() setelah respons, jadi fungsi perlu waktu lebih dari 10 detik.
+export const maxDuration = 60;
+
 const SCREENS: Record<string, Screen> = {
   dashboard: { title: "Dashboard", render: DashboardScreen },
   portfolio: { title: "Portofolio", render: PortfolioScreen },

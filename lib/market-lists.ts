@@ -42,10 +42,15 @@ const stateKey = (market: string, list: string) => `${market}:${list}`;
  * Scrape dan simpan
  * ============================================================ */
 
-async function scrape(market: Market, list: string): Promise<ExploreResult | null> {
-  if (market === "crypto") return list === "viewed" ? scrapeCmcMostViewed() : null;
+/** Scraper melempar Error beralasan bila gagal, alasannya disimpan di market_list_state. */
+async function scrape(market: Market, list: string): Promise<ExploreResult> {
+  if (market === "crypto") {
+    if (list === "viewed") return scrapeCmcMostViewed();
+    throw new Error(`daftar ${list} tidak dikenal`);
+  }
   const def = LIST_DEFS[market].find((d) => d.from === list && d.sub);
-  return def?.sub ? scrapePluangExplore(market, def.sub) : null;
+  if (!def?.sub) throw new Error(`daftar ${list} tidak dikenal`);
+  return scrapePluangExplore(market, def.sub);
 }
 
 async function writeRows(
@@ -71,11 +76,12 @@ async function writeRows(
   await db()`delete from market_lists where market = ${market} and list_key = ${list} and rank > ${rows.length}`;
 }
 
-async function markFetched(market: Market, lists: string[]) {
+async function markFetched(market: Market, lists: string[], via: string) {
   await db()`
-    insert into market_list_state (market, list_key, fetched_at, refreshing_until)
-    select ${market}, l, now(), null from unnest(${lists}::text[]) as l
-    on conflict (market, list_key) do update set fetched_at = now(), refreshing_until = null`;
+    insert into market_list_state (market, list_key, fetched_at, refreshing_until, last_error, last_via)
+    select ${market}, l, now(), null, null, ${via} from unnest(${lists}::text[]) as l
+    on conflict (market, list_key) do update set
+      fetched_at = now(), refreshing_until = null, last_error = null, last_via = excluded.last_via`;
 }
 
 /** Mengambil kunci pembaruan. false bila pembaruan lain sedang berjalan atau baru saja gagal. */
@@ -89,22 +95,23 @@ async function acquire(market: Market, list: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-async function backoff(market: Market, list: string) {
+async function backoff(market: Market, list: string, reason: string) {
   await db()`
-    update market_list_state set refreshing_until = now() + make_interval(secs => ${FAILURE_BACKOFF_SECONDS})
+    update market_list_state
+    set refreshing_until = now() + make_interval(secs => ${FAILURE_BACKOFF_SECONDS}), last_error = ${reason.slice(0, 300)}
     where market = ${market} and list_key = ${list}`;
 }
 
-/** Scrape satu daftar lalu simpan ke database. true bila ada data baru yang tersimpan. */
-export async function refreshList(market: Market, list: string): Promise<boolean> {
-  if (!(await acquire(market, list))) return false;
+export type RefreshOutcome = { ok: boolean; via: string | null; error: string | null };
+
+/** Scrape satu daftar lalu simpan ke database. */
+export async function refreshList(market: Market, list: string): Promise<RefreshOutcome> {
+  if (!(await acquire(market, list))) {
+    return { ok: false, via: null, error: "sedang diperbarui proses lain atau baru saja gagal" };
+  }
 
   try {
     const result = await scrape(market, list);
-    if (!result) {
-      await backoff(market, list);
-      return false;
-    }
 
     await writeRows(
       market,
@@ -134,30 +141,41 @@ export async function refreshList(market: Market, list: string): Promise<boolean
       refreshed.push("overview");
     }
 
-    await markFetched(market, refreshed);
-    return true;
-  } catch {
-    await backoff(market, list).catch(() => undefined);
-    return false;
+    await markFetched(market, refreshed, result.via);
+    return { ok: true, via: result.via, error: null };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "gagal";
+    await backoff(market, list, reason).catch(() => undefined);
+    return { ok: false, via: null, error: reason };
   }
 }
 
-/** Memperbarui semua daftar, dipakai cron harian sebagai pemanasan. */
-export async function refreshAllLists(): Promise<{ lists: number; updated: number }> {
+export type RefreshReport = { lists: number; updated: number; details: Record<string, RefreshOutcome> };
+
+/** Memperbarui semua daftar, dipakai cron harian sebagai pemanasan. Rinciannya membantu mencari sebab gagal. */
+export async function refreshAllLists(): Promise<RefreshReport> {
   const jobs = MARKETS.flatMap((market) => sourceLists(market).map((list) => ({ market, list })));
-  let updated = 0;
-  for (let i = 0; i < jobs.length; i += 4) {
-    const results = await Promise.all(jobs.slice(i, i + 4).map((j) => refreshList(j.market, j.list)));
-    updated += results.filter(Boolean).length;
+  const details: Record<string, RefreshOutcome> = {};
+  // Dua sekaligus: bila Puppeteer terpakai, browsernya sendiri sudah diantre satu per satu.
+  for (let i = 0; i < jobs.length; i += 2) {
+    const batch = jobs.slice(i, i + 2);
+    const results = await Promise.all(batch.map((j) => refreshList(j.market, j.list)));
+    batch.forEach((j, k) => (details[stateKey(j.market, j.list)] = results[k]));
   }
-  return { lists: jobs.length, updated };
+  return { lists: jobs.length, updated: Object.values(details).filter((d) => d.ok).length, details };
 }
 
 /* ============================================================
  * Baca
  * ============================================================ */
 
-export type StoredList = { items: MarketItem[]; overview: OverviewItem[]; fetchedAt: number | null };
+export type StoredList = {
+  items: MarketItem[];
+  overview: OverviewItem[];
+  fetchedAt: number | null;
+  /** Pembaruan terakhir gagal (sumber tidak terjangkau atau strukturnya berubah). */
+  failed: boolean;
+};
 
 export type ListRequest = { market: Market; list: string };
 
@@ -218,7 +236,10 @@ export async function loadLists(
   }
 
   if (missing.size > 0) {
-    await withTimeout(Promise.all([...missing.values()].map((t) => refreshList(t.market, t.list))), waitMs, []);
+    const jobs = Promise.all([...missing.values()].map((t) => refreshList(t.market, t.list)));
+    const finished = await withTimeout(jobs.then(() => true), waitMs, false);
+    // Di Vercel proses berhenti saat respons terkirim, jadi scrape yang belum selesai dilanjutkan lewat after().
+    if (!finished) defer(() => jobs);
   }
   for (const [id, target] of stale) {
     if (!missing.has(id)) defer(() => refreshList(target.market, target.list));
@@ -231,12 +252,13 @@ export async function loadLists(
     order by market, list_key, rank`) as Row[];
 
   const latest = await db()`
-    select market, list_key, (extract(epoch from fetched_at) * 1000)::bigint::text as fetched
+    select market, list_key, (extract(epoch from fetched_at) * 1000)::bigint::text as fetched, last_error
     from market_list_state
     where (market || ':' || list_key) = any(${keys}::text[])`;
   const freshAt = new Map<string, number | null>(
     latest.map((s) => [stateKey(s.market, s.list_key), s.fetched ? Number(s.fetched) : null]),
   );
+  const failedAt = new Set(latest.filter((s) => s.last_error).map((s) => stateKey(s.market, s.list_key)));
 
   const result = new Map<string, StoredList>();
   for (const r of wanted) {
@@ -244,6 +266,7 @@ export async function loadLists(
       items: [],
       overview: [],
       fetchedAt: freshAt.get(stateKey(r.market, r.list)) ?? null,
+      failed: failedAt.has(stateKey(r.market, r.list)),
     });
   }
 
@@ -318,12 +341,14 @@ export async function getWatchlistData(limit: number, maxAgeMs: number = DEFAULT
       const items = pool.slice(0, limit).map((item) => toWatchItem(market, item));
       return { key: def.key, label: def.label, items, locked: pool.length - items.length };
     });
-    const times = sourceLists(market).map((list) => loaded.get(stateKey(market, list))?.fetchedAt ?? 0);
-    return { market, lists, updatedAt: Math.max(...times) || null };
+    const sources = sourceLists(market).map((list) => loaded.get(stateKey(market, list)));
+    const times = sources.map((l) => l?.fetchedAt ?? 0);
+    const hasItems = sources.some((l) => (l?.items.length ?? 0) > 0);
+    return { market, lists, updatedAt: Math.max(...times) || null, failed: !hasItems && sources.some((l) => l?.failed) };
   });
 }
 
-export type MarketPage = { items: MarketItem[]; overview: OverviewItem[]; updatedAt: number | null };
+export type MarketPage = { items: MarketItem[]; overview: OverviewItem[]; updatedAt: number | null; failed: boolean };
 
 /** Satu daftar lengkap beserta ringkasan pasar, untuk tab Pasar. */
 export async function getMarketPage(market: Market, def: ListDef, maxAgeMs: number = DEFAULT_MAX_AGE_MS): Promise<MarketPage> {
@@ -339,5 +364,6 @@ export async function getMarketPage(market: Market, def: ListDef, maxAgeMs: numb
     items: applyListDef(def, source?.items ?? []),
     overview: loaded.get(stateKey(market, "overview"))?.overview ?? [],
     updatedAt: source?.fetchedAt ?? null,
+    failed: Boolean(source?.failed) && (source?.items.length ?? 0) === 0,
   };
 }

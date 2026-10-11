@@ -11,6 +11,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Chromium untuk cadangan Puppeteer: tidak dibundel, tapi berkasnya harus ikut ke fungsi serverless.
+  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+  outputFileTracingIncludes: {
+    "/[tab]": ["./node_modules/@sparticuz/chromium/bin/**"],
+    "/api/cron/prices": ["./node_modules/@sparticuz/chromium/bin/**"],
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
