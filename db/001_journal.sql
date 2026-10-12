@@ -37,8 +37,17 @@ create table if not exists journal_trades (
   emotion     text,
   notes       text,
   tags        text[] not null default '{}',
+  pnl_manual  numeric(38, 18),
+  link_id     text,
   created_at  timestamptz not null default now()
 );
+
+-- Untuk database yang sudah menjalankan versi sebelumnya.
+-- pnl_manual: untung rugi bersih yang diisi sendiri (mata uang aset), hanya dipakai pada baris jual.
+-- link_id: menautkan baris beli dan jual yang dibuat dari satu input "tandai close".
+alter table journal_trades add column if not exists pnl_manual numeric(38, 18);
+alter table journal_trades add column if not exists link_id text;
+create index if not exists journal_trades_link on journal_trades (user_id, link_id) where link_id is not null;
 
 create index if not exists journal_trades_user_time on journal_trades (user_id, traded_at desc);
 create index if not exists journal_trades_user_asset on journal_trades (user_id, asset_id);

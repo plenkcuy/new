@@ -275,6 +275,7 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
                 <th className="num">Nilai</th>
                 <th className="num">Untung rugi</th>
                 <th className="num">Alokasi</th>
+                <th aria-label="Aksi" />
               </tr>
             </thead>
             <tbody>
@@ -308,6 +309,11 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
                     <div className="text-[11px]">{pct(r.unrealizedPct)}</div>
                   </td>
                   <td className="num">{decimal(r.share, 1)}%</td>
+                  <td>
+                    <Link href={`/journal?close=${r.assetId}#form`} className="pill" aria-label={`Tutup posisi ${r.symbol}`}>
+                      Tutup
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>

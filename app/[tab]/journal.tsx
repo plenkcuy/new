@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Lock, Trash2 } from "lucide-react"
 import { AssetIcon } from "@/components/asset-icon";
 import { PageHeader, StatCard, UpgradeCard } from "@/components/ui";
 import { can, deniedRedirect, limitsFor } from "@/lib/access";
-import { getJournal, type JournalData } from "@/lib/journal";
+import { getCloseTarget, getJournal, type JournalData } from "@/lib/journal";
 import { RANGE_DAYS } from "@/lib/journal-calc";
 import { deleteTrade } from "@/lib/journal-actions";
 import {
@@ -98,6 +98,10 @@ export async function JournalScreen({ user, query }: ScreenProps) {
   const { summary, equity, analytics } = data;
   const empty = data.totalTrades === 0;
 
+  // Tombol Tutup di tabel posisi mengisi form dari posisi yang dimaksud.
+  const closeId = Number(query.close);
+  const closeTarget = Number.isSafeInteger(closeId) && closeId > 0 ? await getCloseTarget(user.id, closeId) : null;
+
   const slices = summary.byClass.map((c) => ({
     label: CLASS_LABEL[c.assetClass],
     value: c.value,
@@ -115,10 +119,10 @@ export async function JournalScreen({ user, query }: ScreenProps) {
         </div>
       )}
 
-      <details className="card p-6 [&_summary]:cursor-pointer" open={empty}>
-        <summary className="text-lg">Catat transaksi baru</summary>
+      <details id="form" className="card scroll-mt-24 p-6 [&_summary]:cursor-pointer" open={empty || closeTarget !== null}>
+        <summary className="text-lg">{closeTarget ? `Tutup posisi ${closeTarget.symbol}` : "Catat transaksi baru"}</summary>
         <div className="mt-5">
-          <TradeForm used={data.totalTrades} limit={limits.journalTrades} />
+          <TradeForm used={data.totalTrades} limit={limits.journalTrades} closeTarget={closeTarget} />
         </div>
       </details>
 
@@ -206,7 +210,7 @@ export async function JournalScreen({ user, query }: ScreenProps) {
       )}
 
       <PositionsTable positions={summary.positions} report={report} />
-      <HistoryTable history={data.history} href={href} />
+      <HistoryTable history={data.history} href={href} report={report} />
 
       <p className="text-xs text-[var(--muted)]">
         Harga pasar tertunda dan diperbarui harian. Catatan jurnal, bukan saran investasi. USDT dihitung setara 1 USD.
@@ -234,6 +238,7 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
               <th className="num">Nilai</th>
               <th className="num">Untung rugi</th>
               <th className="num">Alokasi</th>
+              <th aria-label="Aksi" />
             </tr>
           </thead>
           <tbody>
@@ -266,6 +271,11 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
                   <div className="text-[11px]">{pct(p.unrealizedPct)}</div>
                 </td>
                 <td className="num">{decimal(p.share, 1)}%</td>
+                <td>
+                  <Link href={`/journal?close=${p.assetId}#form`} className="pill" aria-label={`Tutup posisi ${p.symbol}`}>
+                    Tutup
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -278,9 +288,11 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
 function HistoryTable({
   history,
   href,
+  report,
 }: {
   history: JournalData["history"];
   href: (patch: Record<string, string | null>) => string;
+  report: Ccy;
 }) {
   return (
     <section className="card overflow-x-auto">
@@ -316,15 +328,32 @@ function HistoryTable({
                       </div>
                     </div>
                   </td>
-                  <td className={r.side === "buy" ? "up" : "down"}>{r.side === "buy" ? "Beli" : "Jual"}</td>
+                  <td className={r.side === "buy" ? "up" : "down"}>
+                    {r.side === "buy" ? "Beli" : "Jual"}
+                    {r.linkId && (
+                      <div className="mt-1">
+                        <span className="badge badge-free" title="Dibuat dari satu input tandai close">
+                          entry dan close
+                        </span>
+                      </div>
+                    )}
+                  </td>
                   <td className="num">{r.assetClass === "idx" ? `${num(r.qty / IDX_LOT)} lot` : quantity(r.qty)}</td>
                   <td className="num">{unitPrice(r.price, r.ccy)}</td>
                   <td className="num text-[var(--muted)]">{unitPrice(r.fee, r.ccy)}</td>
                   <td className={`num ${r.result ? tone(r.result.pnl) : ""}`}>
                     {r.result ? (
                       <>
-                        {pct(r.result.pnlPct)}
-                        {r.result.r !== null && <div className="text-[11px]">{decimal(r.result.r)}R</div>}
+                        <div>{money(r.result.pnl, report)}</div>
+                        <div className="text-[11px]">
+                          {pct(r.result.pnlPct)}
+                          {r.result.r !== null && ` · ${decimal(r.result.r)}R`}
+                        </div>
+                        {r.result.manual && (
+                          <span className="badge badge-premium mt-1" title="Untung rugi diisi sendiri, bukan hitungan otomatis">
+                            PnL manual
+                          </span>
+                        )}
                       </>
                     ) : (
                       ""
@@ -345,7 +374,12 @@ function HistoryTable({
                   <td>
                     <form action={deleteTrade}>
                       <input type="hidden" name="id" value={r.id} />
-                      <button type="submit" className="icon-btn h-9! w-9!" aria-label="Hapus transaksi" title="Hapus transaksi">
+                      <button
+                        type="submit"
+                        className="icon-btn h-9! w-9!"
+                        aria-label="Hapus transaksi"
+                        title={r.linkId ? "Hapus pasangan entry dan close" : "Hapus transaksi"}
+                      >
                         <Trash2 size={15} />
                       </button>
                     </form>

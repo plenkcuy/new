@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import {
   buildEquity,
@@ -32,6 +33,8 @@ export type TradeRow = TradeInput &
     /** Ikon yang tersimpan di database (tanpa tebakan). */
     iconStored: string | null;
     takeProfit: number | null;
+    /** Penanda pasangan beli dan jual dari satu input "tandai close". */
+    linkId: string | null;
     setup: string | null;
     emotion: string | null;
     notes: string | null;
@@ -47,6 +50,7 @@ export async function loadTradeRows(userId: string): Promise<TradeRow[]> {
            t.side, t.qty::text as qty, t.price::text as price, t.fee::text as fee, t.usd_idr::text as usd_idr,
            (extract(epoch from t.traded_at) * 1000)::bigint::text as t,
            t.stop_loss::text as stop_loss, t.take_profit::text as take_profit,
+           t.pnl_manual::text as pnl_manual, t.link_id,
            t.setup, t.emotion, t.notes, t.tags
     from journal_trades t
     join journal_assets a on a.id = t.asset_id
@@ -72,6 +76,8 @@ export async function loadTradeRows(userId: string): Promise<TradeRow[]> {
     t: Number(r.t),
     stopLoss: optNum(r.stop_loss),
     takeProfit: optNum(r.take_profit),
+    pnlManual: optNum(r.pnl_manual),
+    linkId: r.link_id ?? null,
     setup: r.setup,
     emotion: r.emotion,
     notes: r.notes,
@@ -131,7 +137,8 @@ export type HistoryRow = {
   emotion: string | null;
   notes: string | null;
   tags: string[];
-  result: { pnl: number; pnlPct: number; r: number | null } | null;
+  linkId: string | null;
+  result: { pnl: number; pnlPct: number; r: number | null; manual: boolean } | null;
 };
 
 export type JournalData = {
@@ -193,7 +200,8 @@ export async function getJournal(opts: {
       emotion: r.emotion,
       notes: r.notes,
       tags: r.tags,
-      result: closed ? { pnl: closed.pnl, pnlPct: closed.pnlPct, r: closed.r } : null,
+      linkId: r.linkId,
+      result: closed ? { pnl: closed.pnl, pnlPct: closed.pnlPct, r: closed.r, manual: closed.manual } : null,
     };
   });
 
@@ -245,63 +253,146 @@ async function findOrCreateAsset(v: TradeFormValue): Promise<AssetRecord> {
 
 export type InsertResult = { ok: true; asset: FeedAsset } | { ok: false; message: string };
 
+/**
+ * Menyimpan transaksi. Dengan "tandai close" dibuat dua baris sekaligus (beli lalu jual) yang saling
+ * tertaut lewat link_id, dalam satu perintah INSERT sehingga tidak pernah tersimpan setengah.
+ */
 export async function insertTrade(userId: string, limit: number | null, v: TradeFormValue): Promise<InsertResult> {
-  if (limit !== null && (await countTrades(userId)) >= limit) {
-    return { ok: false, message: `Paket Free dibatasi ${limit} transaksi. Upgrade ke Premium untuk jurnal tanpa batas.` };
+  // Menutup posisi (jual) tidak pernah diblokir batas paket. Yang dihitung hanya entry baru.
+  if (v.side === "buy" && limit !== null) {
+    const slots = v.closed ? 2 : 1;
+    const used = await countTrades(userId);
+    if (used + slots > limit) {
+      const message = v.closed
+        ? `Tandai close memakai 2 transaksi (beli dan jual). Sisa jatah Free: ${Math.max(0, limit - used)} dari ${limit}. Upgrade ke Premium untuk jurnal tanpa batas.`
+        : `Paket Free dibatasi ${limit} transaksi. Upgrade ke Premium untuk jurnal tanpa batas.`;
+      return { ok: false, message };
+    }
   }
 
   const asset = await findOrCreateAsset(v);
 
-  let usdIdr = v.usdIdr ? Number(v.usdIdr) : null;
-  if (usdIdr === null) usdIdr = await getUsdIdrAt(v.tradedAt);
-  if (usdIdr === null) {
+  const rateAt = async (ms: number) => (v.usdIdr ? Number(v.usdIdr) : await getUsdIdrAt(ms));
+  const entryRate = await rateAt(v.tradedAt);
+  const closeRate = v.closed && v.closeAt !== null ? await rateAt(v.closeAt) : null;
+  if (entryRate === null || (v.closed && closeRate === null)) {
     return { ok: false, message: "Kurs USD ke IDR belum tersedia saat ini. Isi kolom kurs secara manual." };
   }
 
-  const existing = (await loadTradeRows(userId)).filter((r) => r.assetId === asset.id);
-  const draft: TradeInput = {
-    id: Number.MAX_SAFE_INTEGER,
+  const draft = (id: number, side: "buy" | "sell", qty: string, price: string, fee: string, t: number, usdIdr: number): TradeInput => ({
+    id,
     assetId: asset.id,
     symbol: v.symbol,
-    side: v.side,
-    qty: Number(v.qty),
-    price: Number(v.price),
-    fee: Number(v.fee),
+    side,
+    qty: Number(qty),
+    price: Number(price),
+    fee: Number(fee),
     usdIdr,
-    t: v.tradedAt,
+    t,
     stopLoss: null,
-  };
-  if (findOversell([...existing, draft])) {
+  });
+  const drafts: TradeInput[] = [draft(Number.MAX_SAFE_INTEGER - 1, v.side, v.qty, v.price, v.fee, v.tradedAt, entryRate)];
+  if (v.closed && v.closePrice !== null && v.closeAt !== null && v.feeClose !== null && closeRate !== null) {
+    drafts.push(draft(Number.MAX_SAFE_INTEGER, "sell", v.qty, v.closePrice, v.feeClose, v.closeAt, closeRate));
+  }
+
+  const existing = (await loadTradeRows(userId)).filter((r) => r.assetId === asset.id);
+  if (findOversell([...existing, ...drafts])) {
     return { ok: false, message: "Jumlah jual melebihi posisi yang kamu pegang pada waktu itu." };
   }
 
+  if (!v.closed) {
+    await db()`
+      insert into journal_trades
+        (user_id, asset_id, side, qty, price, fee, usd_idr, traded_at, stop_loss, take_profit, pnl_manual, setup, emotion, notes, tags)
+      values
+        (${userId}, ${asset.id}::bigint, ${v.side}, ${v.qty}::numeric, ${v.price}::numeric, ${v.fee}::numeric,
+         ${entryRate}::numeric, to_timestamp(${v.tradedAt}::double precision / 1000),
+         ${v.stopLoss}::numeric, ${v.takeProfit}::numeric, ${v.pnlManual}::numeric,
+         ${v.setup}::text, ${v.emotion}::text, ${v.notes}::text, ${v.tags}::text[])`;
+    return { ok: true, asset };
+  }
+
+  // Catatan jurnal (setup, emosi, tag, catatan) ikut baris entry. Baris close hanya membawa hasilnya.
+  const link = randomUUID();
   await db()`
     insert into journal_trades
-      (user_id, asset_id, side, qty, price, fee, usd_idr, traded_at, stop_loss, take_profit, setup, emotion, notes, tags)
+      (user_id, asset_id, side, qty, price, fee, usd_idr, traded_at, stop_loss, take_profit, pnl_manual, link_id, setup, emotion, notes, tags)
     values
-      (${userId}, ${asset.id}::bigint, ${v.side}, ${v.qty}::numeric, ${v.price}::numeric, ${v.fee}::numeric,
-       ${usdIdr}::numeric, to_timestamp(${v.tradedAt}::double precision / 1000),
-       ${v.stopLoss}::numeric, ${v.takeProfit}::numeric, ${v.setup}::text, ${v.emotion}::text, ${v.notes}::text,
-       ${v.tags}::text[])`;
-
+      (${userId}, ${asset.id}::bigint, 'buy', ${v.qty}::numeric, ${v.price}::numeric, ${v.fee}::numeric,
+       ${entryRate}::numeric, to_timestamp(${v.tradedAt}::double precision / 1000),
+       null, null, null, ${link}::text, ${v.setup}::text, ${v.emotion}::text, ${v.notes}::text, ${v.tags}::text[]),
+      (${userId}, ${asset.id}::bigint, 'sell', ${v.qty}::numeric, ${v.closePrice}::numeric, ${v.feeClose}::numeric,
+       ${closeRate}::numeric, to_timestamp(${v.closeAt}::double precision / 1000),
+       null, null, ${v.pnlManual}::numeric, ${link}::text, null, null, null, '{}'::text[])`;
   return { ok: true, asset };
 }
 
 export type RemoveResult = { ok: true } | { ok: false; code: "missing" | "oversell" };
 
+/** Menghapus transaksi. Pasangan entry dan close dari "tandai close" selalu dihapus bersamaan. */
 export async function removeTrade(userId: string, tradeId: number): Promise<RemoveResult> {
   const owned = await db()`
-    select asset_id::text as asset_id from journal_trades where id = ${tradeId}::bigint and user_id = ${userId}`;
+    select asset_id::text as asset_id, link_id from journal_trades where id = ${tradeId}::bigint and user_id = ${userId}`;
   if (!owned[0]) return { ok: false, code: "missing" };
 
   const assetId = Number(owned[0].asset_id);
-  const remaining = (await loadTradeRows(userId)).filter((r) => r.assetId === assetId && r.id !== tradeId);
-  if (findOversell(remaining)) {
-    return { ok: false, code: "oversell" };
-  }
+  const link: string | null = owned[0].link_id ?? null;
 
-  await db()`delete from journal_trades where id = ${tradeId}::bigint and user_id = ${userId}`;
+  const all = (await loadTradeRows(userId)).filter((r) => r.assetId === assetId);
+  const removing = new Set<number>([tradeId]);
+  if (link) for (const r of all) if (r.linkId === link) removing.add(r.id);
+
+  if (findOversell(all.filter((r) => !removing.has(r.id)))) return { ok: false, code: "oversell" };
+
+  await db()`
+    delete from journal_trades
+    where user_id = ${userId} and (id = ${tradeId}::bigint or (link_id is not null and link_id = ${link}::text))`;
   return { ok: true };
+}
+
+/* ============================================================
+ * Tombol "Tutup" pada posisi terbuka
+ * ============================================================ */
+
+export type CloseTarget = {
+  assetId: number;
+  symbol: string;
+  assetClass: AssetClass;
+  ccy: Ccy;
+  /** Jumlah yang masih dipegang (satuan terkecil). */
+  qty: number;
+  /** Harga rata rata dalam mata uang aset (sudah termasuk fee beli). */
+  avgPrice: number;
+  /** Harga terkini bila tersedia, kalau tidak harga transaksi terakhir. */
+  price: number;
+  chain: string | null;
+  contract: string | null;
+};
+
+/** Bahan pengisian form untuk menutup satu posisi. null bila posisinya tidak ada lagi. */
+export async function getCloseTarget(userId: string, assetId: number): Promise<CloseTarget | null> {
+  const rows = (await loadTradeRows(userId)).filter((r) => r.assetId === assetId);
+  if (rows.length === 0) return null;
+
+  const first = rows[0];
+  const meta: AssetMeta = { id: assetId, symbol: first.symbol, name: first.name, assetClass: first.assetClass, ccy: first.ccy };
+  const summary = summarize(rows, new Map([[assetId, meta]]), buildMarket(rows, new Map(), []), "IDR", Date.now());
+  const position = summary.positions[0];
+  if (!position) return null;
+
+  const quotes = await withTimeout(fetchQuotes(openTargets(rows), 15_000), 1500, new Map());
+  return {
+    assetId,
+    symbol: first.symbol,
+    assetClass: first.assetClass,
+    ccy: first.ccy,
+    qty: position.qty,
+    avgPrice: position.avgPrice,
+    price: quotes.get(assetId)?.price ?? position.price,
+    chain: first.chain,
+    contract: first.assetClass === "meme" ? first.priceRef : null,
+  };
 }
 
 /* ============================================================
@@ -473,6 +564,7 @@ export async function getCalendar(opts: { userId: string; report: Ccy; months: n
       pnl: c.pnl,
       pnlPct: c.pnlPct,
       r: c.r,
+      manual: c.manual,
     });
   }
   for (const r of rows) {

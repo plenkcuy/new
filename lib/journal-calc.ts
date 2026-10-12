@@ -23,6 +23,8 @@ export type TradeInput = {
   usdIdr: number;
   t: number;
   stopLoss: number | null;
+  /** Untung rugi bersih isian sendiri (mata uang aset) untuk baris jual. Menggantikan hitungan otomatis. */
+  pnlManual?: number | null;
 };
 
 export type AssetMeta = {
@@ -76,6 +78,8 @@ export type ClosedTrade = {
   r: number | null;
   /** Bagian pnl yang berasal dari pergerakan kurs. */
   fxEffect: number;
+  /** true bila pnl berasal dari isian manual, bukan hitungan otomatis. */
+  manual: boolean;
 };
 
 /**
@@ -104,8 +108,12 @@ function applyTrade(state: PositionState, tr: TradeInput, ccy: Ccy, report: Ccy)
 
   const proceedsNative = qty * tr.price - fee;
   const costNative = qty * avgNative;
-  const pnlNative = proceedsNative - costNative;
-  const pnlReport = proceedsNative * rate - qty * avgReport;
+
+  // PnL manual dianggap sudah bersih (fee, pajak, funding) dan berlaku untuk seluruh jumlah di transaksi ini.
+  // Sisa posisi tetap berkurang menurut harga rata rata, hanya angka untung ruginya yang diganti.
+  const manual = tr.pnlManual !== null && tr.pnlManual !== undefined;
+  const pnlNative = manual ? (tr.pnlManual as number) * (qty / tr.qty) : proceedsNative - costNative;
+  const pnlReport = manual ? pnlNative * rate : proceedsNative * rate - qty * avgReport;
 
   const risk = state.stop !== null && state.stop < avgNative ? (avgNative - state.stop) * qty : null;
 
@@ -123,7 +131,8 @@ function applyTrade(state: PositionState, tr: TradeInput, ccy: Ccy, report: Ccy)
     pnl: pnlReport,
     pnlPct: costNative > 0 ? (pnlNative / costNative) * 100 : 0,
     r: risk === null ? null : pnlNative / risk,
-    fxEffect: pnlReport - pnlNative * rate,
+    fxEffect: manual ? 0 : pnlReport - pnlNative * rate,
+    manual,
   };
 }
 

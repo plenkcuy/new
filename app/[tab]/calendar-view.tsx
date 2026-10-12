@@ -280,6 +280,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
                           <div className="text-[11px]">
                             {minus(pct(t.pnlPct))}
                             {t.r !== null && ` · ${minus(decimal(t.r))}R`}
+                            {t.manual && " · manual"}
                           </div>
                         </div>
                       </li>

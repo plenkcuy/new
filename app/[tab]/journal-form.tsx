@@ -1,50 +1,155 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 import { addTrade } from "@/lib/journal-actions";
 import { deniedRedirect } from "@/lib/access";
-import { toWibInput } from "@/lib/journal-input";
+import { previewPnl, toWibInput } from "@/lib/journal-input";
+import type { CloseTarget } from "@/lib/journal";
 import {
   ASSET_CLASSES,
   CHAINS,
   CHAIN_LABEL,
   CLASS_LABEL,
   EMOTIONS,
+  IDX_LOT,
+  money,
   type AssetClass,
+  type Ccy,
   type JournalFormState,
 } from "@/lib/shared";
 
 const field =
-  "w-full rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] px-4 py-3 text-sm outline-none transition focus:border-white/30";
+  "w-full rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] px-4 py-3 text-sm outline-none transition focus:border-white/30 disabled:cursor-not-allowed disabled:opacity-40";
 const label = "mb-1.5 block text-xs text-[var(--muted)]";
 
 const INITIAL: JournalFormState = { ok: false };
 
-export function TradeForm({ used, limit }: { used: number; limit: number | null }) {
-  const [state, action, pending] = useActionState(addTrade, INITIAL);
-  const [assetClass, setAssetClass] = useState<AssetClass>("idx");
-  const [side, setSide] = useState<"buy" | "sell">("buy");
+/** Angka tanpa notasi eksponen, supaya aman dimasukkan ke kolom input. */
+const plain = (n: number) => n.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 });
+
+/** Teks angka dari input (boleh koma desimal) menjadi number. NaN bila kosong atau bukan angka. */
+const toNum = (raw: string) => (raw.trim() === "" ? NaN : Number(raw.replace(/\s/g, "").replace(",", ".")));
+const optNum = (raw: string) => {
+  const n = toNum(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+const minus = (text: string) => text.replace(/-/g, "\u2212");
+
+type Props = { used: number; limit: number | null; closeTarget?: CloseTarget | null };
+
+export function TradeForm({ used, limit, closeTarget = null }: Props) {
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [state, dispatch, pending] = useActionState(addTrade, INITIAL);
+  const [, startTransition] = useTransition();
+
+  // Menutup posisi yang sudah ada: kelas, simbol, jumlah, dan harga terisi dari posisinya.
+  const initialUnit = closeTarget?.assetClass === "idx" && closeTarget.qty % IDX_LOT !== 0 ? "share" : "lot";
+  const initialQty = closeTarget
+    ? plain(closeTarget.assetClass === "idx" && initialUnit === "lot" ? closeTarget.qty / IDX_LOT : closeTarget.qty)
+    : "";
+
+  const [assetClass, setAssetClass] = useState<AssetClass>(closeTarget?.assetClass ?? "idx");
+  const [side, setSide] = useState<"buy" | "sell">(closeTarget ? "sell" : "buy");
+  const [closed, setClosed] = useState(false);
+  const [pnlMode, setPnlMode] = useState<"auto" | "manual">("auto");
+  const [unit, setUnit] = useState<"lot" | "share">(initialUnit);
+  const [qty, setQty] = useState(initialQty);
+  const [price, setPrice] = useState(closeTarget ? plain(closeTarget.price) : "");
+  const [closePrice, setClosePrice] = useState("");
+  const [fee, setFee] = useState("");
+  const [feeClose, setFeeClose] = useState("");
+  const [pnlManual, setPnlManual] = useState("");
   const [now, setNow] = useState("");
 
   useEffect(() => setNow(toWibInput(Date.now())), []);
 
-  const v = state.values ?? {};
-  const full = limit !== null && used >= limit;
-  const quote = assetClass === "idx" ? "Rp" : "USD";
+  // Setelah tersimpan: kosongkan isian. Bila berasal dari tombol Tutup, kembali ke jurnal biasa.
+  useEffect(() => {
+    if (!state.ok) return;
+    formRef.current?.reset();
+    setQty("");
+    setPrice("");
+    setClosePrice("");
+    setFee("");
+    setFeeClose("");
+    setPnlManual("");
+    setClosed(false);
+    setPnlMode("auto");
+    if (closeTarget) router.replace("/journal", { scroll: false });
+  }, [state, closeTarget, router]);
+
+  const ccy: Ccy = assetClass === "idx" ? "IDR" : "USD";
+  const quote = ccy === "IDR" ? "Rp" : "USD";
+  const closing = closed || side === "sell";
+  const lots = assetClass === "idx" && unit === "lot";
+  const qtyUnits = toNum(qty) * (lots ? IDX_LOT : 1);
+
+  const preview = useMemo(() => {
+    if (!closing) return null;
+    if (closed) {
+      return previewPnl({
+        assetClass,
+        kind: "roundtrip",
+        qty: qtyUnits,
+        entry: toNum(price),
+        close: toNum(closePrice),
+        feeEntry: optNum(fee),
+        feeClose: optNum(feeClose),
+      });
+    }
+    return previewPnl({
+      assetClass,
+      kind: "sell",
+      qty: qtyUnits,
+      close: toNum(price),
+      avgPrice: closeTarget?.avgPrice,
+      feeClose: optNum(fee),
+    });
+  }, [closing, closed, assetClass, qtyUnits, price, closePrice, fee, feeClose, closeTarget?.avgPrice]);
+
+  // Entry baru dibatasi paket. Menutup posisi (jual) tidak pernah dibatasi.
+  const slots = closed ? 2 : 1;
+  const blocked = side === "buy" && limit !== null && used + slots > limit;
+
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    startTransition(() => dispatch(data));
+  };
+
+  const priceLabel = closed ? "Harga entry" : side === "sell" ? "Harga close" : "Harga";
+  const timeLabel = closed ? "Waktu entry (WIB)" : side === "sell" ? "Waktu close (WIB)" : "Waktu transaksi (WIB)";
+  const submitLabel = pending ? "Menyimpan" : closed ? "Simpan entry dan close" : side === "sell" ? "Simpan close" : "Simpan transaksi";
 
   return (
-    <form action={action} className="flex flex-col gap-5 [color-scheme:dark]">
+    <form ref={formRef} onSubmit={submit} className="flex flex-col gap-5 [color-scheme:dark]" key={closeTarget?.assetId ?? "baru"}>
       <input type="hidden" name="assetClass" value={assetClass} />
       <input type="hidden" name="side" value={side} />
+      <input type="hidden" name="pnlMode" value={closing ? pnlMode : "auto"} />
+      {closed && <input type="hidden" name="closed" value="on" />}
 
-      <div className="flex flex-wrap gap-2">
-        {ASSET_CLASSES.map((c) => (
-          <button key={c} type="button" className="pill" data-active={assetClass === c} onClick={() => setAssetClass(c)}>
-            {CLASS_LABEL[c]}
-          </button>
-        ))}
-      </div>
+      {closeTarget ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] p-4 text-sm">
+          <span>
+            Menutup posisi <strong>{closeTarget.symbol}</strong>. Isian sudah dibuat dari posisimu, ubah jumlah bila hanya menutup sebagian.
+          </span>
+          <Link href="/journal" className="pill">
+            Batal
+          </Link>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {ASSET_CLASSES.map((c) => (
+            <button key={c} type="button" className="pill" data-active={assetClass === c} onClick={() => setAssetClass(c)}>
+              {CLASS_LABEL[c]}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div>
@@ -58,7 +163,8 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
             maxLength={20}
             autoComplete="off"
             className={field}
-            defaultValue={v.symbol}
+            defaultValue={closeTarget?.symbol}
+            readOnly={Boolean(closeTarget)}
             placeholder={
               assetClass === "idx" ? "BBCA" : assetClass === "us_stock" ? "AAPL" : assetClass === "crypto" ? "BTC" : "BONK"
             }
@@ -68,10 +174,16 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
         <div>
           <span className={label}>Sisi</span>
           <div className="flex gap-2">
-            <button type="button" className="pill flex-1" data-active={side === "buy"} onClick={() => setSide("buy")}>
+            <button
+              type="button"
+              className="pill flex-1"
+              data-active={side === "buy"}
+              disabled={Boolean(closeTarget)}
+              onClick={() => setSide("buy")}
+            >
               Beli
             </button>
-            <button type="button" className="pill flex-1" data-active={side === "sell"} onClick={() => setSide("sell")}>
+            <button type="button" className="pill flex-1" data-active={side === "sell"} onClick={() => { setSide("sell"); setClosed(false); }}>
               Jual
             </button>
           </div>
@@ -89,11 +201,18 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
               inputMode="decimal"
               autoComplete="off"
               className={field}
-              defaultValue={v.qty}
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
               placeholder={assetClass === "idx" ? "10" : "0,5"}
             />
             {assetClass === "idx" && (
-              <select name="unit" className={`${field} w-28`} defaultValue="lot" aria-label="Satuan jumlah">
+              <select
+                name="unit"
+                className={`${field} w-28`}
+                value={unit}
+                onChange={(e) => setUnit(e.target.value === "share" ? "share" : "lot")}
+                aria-label="Satuan jumlah"
+              >
                 <option value="lot">lot</option>
                 <option value="share">lembar</option>
               </select>
@@ -103,7 +222,7 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
 
         <div>
           <label className={label} htmlFor="price">
-            Harga ({quote})
+            {priceLabel} ({quote})
           </label>
           <input
             id="price"
@@ -112,11 +231,62 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
             inputMode="decimal"
             autoComplete="off"
             className={field}
-            defaultValue={v.price}
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
             placeholder={assetClass === "idx" ? "9850" : "0,00001234"}
           />
         </div>
       </div>
+
+      {side === "buy" && !closeTarget && (
+        <div className="flex items-start justify-between gap-4 rounded-2xl border border-[var(--line)] p-4">
+          <div>
+            <div className="text-sm">Tandai close</div>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+              Catat entry dan close sekaligus untuk posisi yang sudah selesai. Hasilnya langsung masuk ke Kalender dan statistik.
+              {closed && " Stop loss dan take profit dinonaktifkan."}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={closed}
+            aria-label="Tandai close"
+            onClick={() => setClosed((v) => !v)}
+            className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full border transition ${
+              closed ? "border-teal-400/50 bg-teal-500/30" : "border-white/15 bg-white/5"
+            }`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${closed ? "left-6" : "left-0.5"}`} />
+          </button>
+        </div>
+      )}
+
+      {closed && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className={label} htmlFor="closePrice">
+              Harga close ({quote})
+            </label>
+            <input
+              id="closePrice"
+              name="closePrice"
+              required
+              inputMode="decimal"
+              autoComplete="off"
+              className={field}
+              value={closePrice}
+              onChange={(e) => setClosePrice(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={label} htmlFor="closeWhen">
+              Waktu close (WIB)
+            </label>
+            <input key={now} id="closeWhen" name="closeWhen" type="datetime-local" required className={field} defaultValue={now} />
+          </div>
+        </div>
+      )}
 
       {assetClass === "meme" && (
         <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
@@ -124,13 +294,14 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
             <label className={label} htmlFor="chain">
               Chain
             </label>
-            <select id="chain" name="chain" className={field} defaultValue="solana">
+            <select id="chain" name="chain" className={field} defaultValue={closeTarget?.chain ?? "solana"} disabled={Boolean(closeTarget)}>
               {CHAINS.map((c) => (
                 <option key={c} value={c}>
                   {CHAIN_LABEL[c]}
                 </option>
               ))}
             </select>
+            {closeTarget && <input type="hidden" name="chain" value={closeTarget.chain ?? "solana"} />}
           </div>
           <div>
             <label className={label} htmlFor="contract">
@@ -143,7 +314,8 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
               autoComplete="off"
               spellCheck={false}
               className={field}
-              defaultValue={v.contract}
+              defaultValue={closeTarget?.contract ?? undefined}
+              readOnly={Boolean(closeTarget)}
               placeholder="Salin dari DexScreener atau explorer"
             />
           </div>
@@ -152,18 +324,68 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
 
       <div>
         <label className={label} htmlFor="when">
-          Waktu transaksi (WIB)
+          {timeLabel}
         </label>
-        <input
-          key={now}
-          id="when"
-          name="when"
-          type="datetime-local"
-          required
-          className={`${field} sm:max-w-xs`}
-          defaultValue={v.when ?? now}
-        />
+        <input key={now} id="when" name="when" type="datetime-local" required className={`${field} sm:max-w-xs`} defaultValue={now} />
       </div>
+
+      {closing && (
+        <div className="rounded-2xl border border-[var(--line)] p-4" data-testid="pnl-block">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm">Hasil (PnL)</span>
+            <div className="flex gap-2">
+              <button type="button" className="pill" data-active={pnlMode === "auto"} onClick={() => setPnlMode("auto")}>
+                Otomatis
+              </button>
+              <button type="button" className="pill" data-active={pnlMode === "manual"} onClick={() => setPnlMode("manual")}>
+                Manual
+              </button>
+            </div>
+          </div>
+
+          {pnlMode === "auto" ? (
+            <div className="mt-3 text-sm" data-testid="pnl-preview">
+              {preview ? (
+                <>
+                  <span className={`text-lg font-bold ${preview.pnl >= 0 ? "up" : "down"}`}>{minus(money(preview.pnl, ccy))}</span>
+                  <span className={`ml-2 text-xs ${preview.pnl >= 0 ? "up" : "down"}`}>
+                    {minus(`${preview.pct >= 0 ? "+" : ""}${preview.pct.toFixed(2).replace(".", ",")}%`)}
+                  </span>
+                  <p className="mt-1 text-[11px] text-[var(--muted)]">
+                    Sudah dikurangi fee{closed ? " entry dan close" : ""}. Fee yang kosong diperkirakan dari persentase bawaan.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs leading-relaxed text-[var(--muted)]">
+                  {side === "sell" && !closeTarget
+                    ? "Dihitung otomatis saat disimpan, dari harga rata rata posisimu dikurangi fee."
+                    : "Isi jumlah dan harga untuk melihat perkiraan hasil."}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="mt-3">
+              <label className={label} htmlFor="pnlManual">
+                PnL bersih ({quote})
+              </label>
+              <input
+                id="pnlManual"
+                name="pnlManual"
+                required
+                inputMode="text"
+                autoComplete="off"
+                className={`${field} sm:max-w-xs`}
+                value={pnlManual}
+                onChange={(e) => setPnlManual(e.target.value)}
+                placeholder="Contoh 250000. Pakai minus di depan untuk rugi"
+              />
+              <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+                Angka ini dianggap sudah bersih (fee, pajak, funding) dan menggantikan hitungan otomatis. Fee yang kamu isi hanya dicatat.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       <details className="rounded-2xl border border-[var(--line)] p-4 [&_summary]:cursor-pointer">
         <summary className="text-sm">Detail tambahan (fee, kurs, risiko, catatan)</summary>
@@ -171,54 +393,60 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div>
             <label className={label} htmlFor="fee">
-              Fee ({quote}), kosongkan untuk perkiraan otomatis
+              {closed ? "Fee entry" : "Fee"} ({quote}), kosongkan untuk perkiraan otomatis
             </label>
-            <input id="fee" name="fee" inputMode="decimal" autoComplete="off" className={field} defaultValue={v.fee} />
+            <input id="fee" name="fee" inputMode="decimal" autoComplete="off" className={field} value={fee} onChange={(e) => setFee(e.target.value)} />
           </div>
+          {closed && (
+            <div>
+              <label className={label} htmlFor="feeClose">
+                Fee close ({quote}), kosongkan untuk perkiraan otomatis
+              </label>
+              <input
+                id="feeClose"
+                name="feeClose"
+                inputMode="decimal"
+                autoComplete="off"
+                className={field}
+                value={feeClose}
+                onChange={(e) => setFeeClose(e.target.value)}
+              />
+            </div>
+          )}
           <div>
             <label className={label} htmlFor="usdIdr">
               Kurs USD ke IDR, kosongkan agar otomatis
             </label>
-            <input
-              id="usdIdr"
-              name="usdIdr"
-              inputMode="decimal"
-              autoComplete="off"
-              className={field}
-              defaultValue={v.usdIdr}
-              placeholder="16250"
-            />
+            <input id="usdIdr" name="usdIdr" inputMode="decimal" autoComplete="off" className={field} placeholder="16250" />
           </div>
           <div>
             <label className={label} htmlFor="stopLoss">
               Stop loss ({quote})
             </label>
-            <input id="stopLoss" name="stopLoss" inputMode="decimal" autoComplete="off" className={field} defaultValue={v.stopLoss} />
+            <input id="stopLoss" name="stopLoss" inputMode="decimal" autoComplete="off" className={field} disabled={closing} />
           </div>
           <div>
             <label className={label} htmlFor="takeProfit">
               Take profit ({quote})
             </label>
-            <input
-              id="takeProfit"
-              name="takeProfit"
-              inputMode="decimal"
-              autoComplete="off"
-              className={field}
-              defaultValue={v.takeProfit}
-            />
+            <input id="takeProfit" name="takeProfit" inputMode="decimal" autoComplete="off" className={field} disabled={closing} />
           </div>
+          {closing && (
+            <p className="text-[11px] leading-relaxed text-[var(--muted)] sm:col-span-2 xl:col-span-4" data-testid="sltp-note">
+              Stop loss dan take profit nonaktif karena {closed ? "posisi ditandai close" : "ini transaksi jual"}. Risiko dihitung dari stop loss yang kamu isi saat entry.
+            </p>
+          )}
           <div>
             <label className={label} htmlFor="setup">
               Setup
             </label>
-            <input id="setup" name="setup" maxLength={60} className={field} defaultValue={v.setup} placeholder="Breakout, pullback, dll" />
+            <input id="setup" name="setup" maxLength={60} className={field} placeholder="Breakout, pullback, dll" />
           </div>
           <div>
             <label className={label} htmlFor="emotion">
               Emosi saat entry
             </label>
-            <select id="emotion" name="emotion" className={field} defaultValue={v.emotion ?? ""}>
+            <select id="emotion" name="emotion" className={field} defaultValue="">
               <option value="">Tidak diisi</option>
               {EMOTIONS.map((e) => (
                 <option key={e} value={e}>
@@ -231,13 +459,13 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
             <label className={label} htmlFor="tags">
               Tag, pisahkan dengan koma
             </label>
-            <input id="tags" name="tags" className={field} defaultValue={v.tags} placeholder="swing, dividen" />
+            <input id="tags" name="tags" className={field} placeholder="swing, dividen" />
           </div>
           <div className="sm:col-span-2 xl:col-span-4">
             <label className={label} htmlFor="notes">
               Catatan
             </label>
-            <textarea id="notes" name="notes" rows={3} maxLength={1000} className={field} defaultValue={v.notes} />
+            <textarea id="notes" name="notes" rows={3} maxLength={1000} className={field} />
           </div>
         </div>
       </details>
@@ -254,13 +482,13 @@ export function TradeForm({ used, limit }: { used: number; limit: number | null 
       )}
 
       <div className="flex flex-wrap items-center gap-4">
-        <button type="submit" className="btn btn-primary" disabled={pending || full}>
-          {pending ? "Menyimpan" : "Simpan transaksi"}
+        <button type="submit" className="btn btn-primary" disabled={pending || blocked}>
+          {submitLabel}
         </button>
         {limit !== null && (
           <span className="text-xs text-[var(--muted)]">
-            {used} dari {limit} transaksi terpakai
-            {full && (
+            {used} dari {limit} transaksi terpakai. Menutup posisi tidak dibatasi.
+            {blocked && (
               <>
                 {" "}
                 ·{" "}

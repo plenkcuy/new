@@ -270,6 +270,7 @@ export type CalendarTrade = {
   pnl: number;
   pnlPct: number;
   r: number | null;
+  manual: boolean;
 };
 
 /** Rekap satu hari (tanggal WIB). pnl = untung rugi terealisasi dari transaksi jual hari itu. */

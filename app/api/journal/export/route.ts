@@ -5,8 +5,8 @@ import { loadTradeRows } from "@/lib/journal";
 import { CLASS_LABEL } from "@/lib/shared";
 
 // Sel yang diawali = + - @ bisa dibaca sebagai rumus oleh Excel, jadi diberi tanda petik di depan.
-const cell = (value: string | number | null) => {
-  let text = value === null ? "" : String(value);
+const cell = (value: string | number | null | undefined) => {
+  let text = value === null || value === undefined ? "" : String(value);
   if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
@@ -33,6 +33,8 @@ export async function GET() {
     "Emosi",
     "Tag",
     "Catatan",
+    "PnL manual",
+    "ID pasangan close",
   ];
   const rows = trades.map((t) => [
     new Date(t.t).toISOString(),
@@ -50,6 +52,8 @@ export async function GET() {
     t.emotion,
     t.tags.join(" "),
     t.notes,
+    t.pnlManual,
+    t.linkId,
   ]);
   const csv = [header, ...rows].map((row) => row.map(cell).join(",")).join("\r\n");
 

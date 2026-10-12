@@ -13,7 +13,7 @@ import { refreshAssetPrices } from "./market-feed";
 import { refreshAssetIcon } from "./quotes";
 import type { JournalFormState } from "./shared";
 
-const ECHO_KEYS = ["symbol", "qty", "price", "fee", "usdIdr", "when", "stopLoss", "takeProfit", "setup", "notes", "tags", "contract", "emotion"];
+const ECHO_KEYS = ["symbol", "qty", "price", "fee", "usdIdr", "when", "stopLoss", "takeProfit", "setup", "notes", "tags", "contract", "emotion", "closePrice", "closeWhen", "feeClose", "pnlManual"];
 
 export async function addTrade(_: JournalFormState, formData: FormData): Promise<JournalFormState> {
   const { user } = await requireSession();
