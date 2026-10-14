@@ -141,6 +141,9 @@ export const CLASS_COLOR: Record<AssetClass, string> = {
 
 export type Ccy = "IDR" | "USD";
 
+/** Arah posisi. Long dibuka dengan beli, short dibuka dengan jual. */
+export type Direction = "long" | "short";
+
 export const CHAINS = ["solana", "ethereum", "base", "bsc"] as const;
 export type Chain = (typeof CHAINS)[number];
 
@@ -219,6 +222,7 @@ export type LivePosition = {
   name: string;
   assetClass: AssetClass;
   ccy: Ccy;
+  direction: Direction;
   qty: number;
   /** Harga rata rata dalam mata uang aset. */
   avgPrice: number;
@@ -266,6 +270,7 @@ export function assetIconUrl(assetClass: AssetClass, symbol: string, stored: str
 export type CalendarTrade = {
   symbol: string;
   assetClass: AssetClass;
+  direction: Direction;
   qty: number;
   pnl: number;
   pnlPct: number;

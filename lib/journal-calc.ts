@@ -6,7 +6,7 @@
  * Laporan dihitung dalam mata uang laporan (IDR atau USD). Modal dikonversi memakai kurs saat
  * transaksi, nilai pasar memakai kurs hari yang dihitung, jadi efek kurs ikut terbaca.
  */
-import type { AssetClass, Ccy, EquityPoint } from "./shared";
+import type { AssetClass, Ccy, Direction, EquityPoint } from "./shared";
 
 export const DAY_MS = 86_400_000;
 
@@ -15,6 +15,8 @@ export type TradeInput = {
   assetId: number;
   symbol: string;
   side: "buy" | "sell";
+  /** Arah posisi. Kosong berarti long. */
+  direction?: Direction;
   /** Selalu dalam satuan terkecil (lembar untuk saham IDX). */
   qty: number;
   price: number;
@@ -53,12 +55,26 @@ export const sortTrades = <T extends { t: number; id: number }>(trades: T[]): T[
  * Posisi (harga rata rata bergerak)
  * ============================================================ */
 
+export const dirOf = (tr: { direction?: Direction }): Direction => tr.direction ?? "long";
+
+/** Long: +1. Short: -1 (hasil dan biaya berbalik arah). */
+const signOf = (direction: Direction) => (direction === "long" ? 1 : -1);
+
+/** Long dibuka dengan beli, short dibuka dengan jual. Sisi lainnya menutup posisi. */
+export const isOpening = (direction: Direction, side: "buy" | "sell") => (direction === "long") === (side === "buy");
+
+const stateKey = (assetId: number, direction: Direction) => `${assetId}:${direction}`;
+
 type PositionState = {
   qty: number;
-  /** Total modal dalam mata uang aset (termasuk fee beli). */
+  /**
+   * Long : total modal dalam mata uang aset (termasuk fee beli).
+   * Short: total hasil jual bersih (setelah fee), yaitu "modal" yang harus dikembalikan saat cover.
+   */
   costNative: number;
-  /** Total modal dalam mata uang laporan, dikunci pada kurs saat beli. */
+  /** Sama seperti costNative tetapi dalam mata uang laporan, dikunci pada kurs saat membuka posisi. */
   costReport: number;
+  /** Stop awal untuk menghitung R. */
   stop: number | null;
 };
 
@@ -68,33 +84,40 @@ export type ClosedTrade = {
   tradeId: number;
   assetId: number;
   symbol: string;
+  direction: Direction;
   t: number;
   qty: number;
   /** Untung rugi dalam mata uang laporan, setelah fee. */
   pnl: number;
-  /** Untung rugi dalam persen terhadap modal bagian yang dijual. */
+  /** Untung rugi dalam persen terhadap modal bagian yang ditutup. */
   pnlPct: number;
-  /** Kelipatan risiko (R). null jika stop loss tidak diisi. */
+  /** Kelipatan risiko (R). null jika stop awal tidak diisi atau berada di sisi yang salah. */
   r: number | null;
   /** Bagian pnl yang berasal dari pergerakan kurs. */
   fxEffect: number;
   /** true bila pnl berasal dari isian manual, bukan hitungan otomatis. */
   manual: boolean;
+  /** Modal bagian yang ditutup dalam mata uang laporan (dikunci pada kurs saat membuka). */
+  costReport: number;
 };
 
 /**
  * Menerapkan satu transaksi ke state posisi.
- * Beli : modal bertambah (harga x qty + fee).
- * Jual : pnl = hasil jual bersih dikurangi (qty x harga rata rata).
+ *
+ * Membuka : modal bertambah. Long: harga x qty + fee. Short: harga x qty dikurangi fee (hasil jual bersih).
+ * Menutup : hasil = sign x (nilai penutupan dikurangi qty x harga rata rata), dengan sign +1 untuk long
+ *           dan -1 untuk short. Nilai penutupan long = hasil jual bersih, short = biaya beli kembali.
  */
 function applyTrade(state: PositionState, tr: TradeInput, ccy: Ccy, report: Ccy): ClosedTrade | null {
+  const direction = dirOf(tr);
+  const sign = signOf(direction);
   const rate = convRate(ccy, report, tr.usdIdr);
 
-  if (tr.side === "buy") {
-    const cost = tr.qty * tr.price + tr.fee;
+  if (isOpening(direction, tr.side)) {
+    const value = tr.qty * tr.price + sign * tr.fee;
     state.qty += tr.qty;
-    state.costNative += cost;
-    state.costReport += cost * rate;
+    state.costNative += value;
+    state.costReport += value * rate;
     if (tr.stopLoss !== null) state.stop = tr.stopLoss;
     return null;
   }
@@ -106,16 +129,19 @@ function applyTrade(state: PositionState, tr: TradeInput, ccy: Ccy, report: Ccy)
   const avgReport = state.costReport / state.qty;
   const fee = tr.fee * (qty / tr.qty);
 
-  const proceedsNative = qty * tr.price - fee;
+  const closeNative = qty * tr.price - sign * fee;
   const costNative = qty * avgNative;
 
   // PnL manual dianggap sudah bersih (fee, pajak, funding) dan berlaku untuk seluruh jumlah di transaksi ini.
   // Sisa posisi tetap berkurang menurut harga rata rata, hanya angka untung ruginya yang diganti.
   const manual = tr.pnlManual !== null && tr.pnlManual !== undefined;
-  const pnlNative = manual ? (tr.pnlManual as number) * (qty / tr.qty) : proceedsNative - costNative;
-  const pnlReport = manual ? pnlNative * rate : proceedsNative * rate - qty * avgReport;
+  const pnlNative = manual ? (tr.pnlManual as number) * (qty / tr.qty) : sign * (closeNative - costNative);
+  const pnlReport = manual ? pnlNative * rate : sign * (closeNative * rate - qty * avgReport);
 
-  const risk = state.stop !== null && state.stop < avgNative ? (avgNative - state.stop) * qty : null;
+  // Stop yang diisi saat menutup menggantikan stop awal posisi, khusus untuk menghitung R transaksi ini.
+  const stop = tr.stopLoss ?? state.stop;
+  const stopOk = stop !== null && (direction === "long" ? stop < avgNative : stop > avgNative);
+  const risk = stopOk ? Math.abs(avgNative - (stop as number)) * qty : null;
 
   state.qty -= qty;
   state.costNative -= costNative;
@@ -126,6 +152,7 @@ function applyTrade(state: PositionState, tr: TradeInput, ccy: Ccy, report: Ccy)
     tradeId: tr.id,
     assetId: tr.assetId,
     symbol: tr.symbol,
+    direction,
     t: tr.t,
     qty,
     pnl: pnlReport,
@@ -133,20 +160,26 @@ function applyTrade(state: PositionState, tr: TradeInput, ccy: Ccy, report: Ccy)
     r: risk === null ? null : pnlNative / risk,
     fxEffect: manual ? 0 : pnlReport - pnlNative * rate,
     manual,
+    costReport: qty * avgReport,
   };
 }
 
-/** Transaksi jual pertama yang membuat posisi minus (jual lebih banyak dari yang dimiliki). */
+/**
+ * Transaksi penutup pertama yang melebihi posisi yang sedang terbuka.
+ * Long dan short pada aset yang sama dihitung terpisah.
+ */
 export function findOversell(trades: TradeInput[]): TradeInput | null {
-  const qtyByAsset = new Map<number, number>();
+  const held = new Map<string, number>();
   for (const tr of sortTrades(trades)) {
-    const held = qtyByAsset.get(tr.assetId) ?? 0;
-    if (tr.side === "buy") {
-      qtyByAsset.set(tr.assetId, held + tr.qty);
+    const direction = dirOf(tr);
+    const key = stateKey(tr.assetId, direction);
+    const open = held.get(key) ?? 0;
+    if (isOpening(direction, tr.side)) {
+      held.set(key, open + tr.qty);
       continue;
     }
-    if (tr.qty > held * (1 + 1e-9) + 1e-12) return tr;
-    qtyByAsset.set(tr.assetId, held - tr.qty);
+    if (tr.qty > open * (1 + 1e-9) + 1e-12) return tr;
+    held.set(key, open - tr.qty);
   }
   return null;
 }
@@ -235,18 +268,26 @@ export type PositionView = {
   assetClass: AssetClass;
   ccy: Ccy;
   icon: string | null;
+  direction: Direction;
   qty: number;
-  /** Harga rata rata dalam mata uang aset. */
+  /** Harga rata rata dalam mata uang aset (short: harga jual rata rata bersih). */
   avgPrice: number;
+  /** Stop awal posisi (untuk R), bila ada. */
+  stop: number | null;
   /** Harga terakhir dalam mata uang aset. */
   price: number;
   /** true bila harga diambil dari transaksi terakhir (data pasar belum ada atau sudah lama). */
   priceFromTrade: boolean;
+  /**
+   * Long: nilai pasar. Short: untung rugi belum terealisasi (tanpa margin), karena posisi short
+   * bukan aset yang dibeli dan tidak menambah modal.
+   */
   value: number;
   cost: number;
   unrealized: number;
   unrealizedPct: number;
   realized: number;
+  /** Persen dari total nilai posisi long. Short tidak ikut alokasi. */
   share: number;
 };
 
@@ -275,20 +316,23 @@ export function summarize(
   report: Ccy,
   now: number,
 ): Summary {
-  const states = new Map<number, PositionState>();
+  const states = new Map<string, { assetId: number; direction: Direction; state: PositionState }>();
   const closed: ClosedTrade[] = [];
-  const bought = new Map<number, number>();
+  const invested = new Map<number, number>();
 
   for (const tr of sortTrades(trades)) {
     const asset = assets.get(tr.assetId);
     if (!asset) continue;
-    const state = states.get(tr.assetId) ?? emptyState();
-    states.set(tr.assetId, state);
-    const result = applyTrade(state, tr, asset.ccy, report);
+    const direction = dirOf(tr);
+    const key = stateKey(tr.assetId, direction);
+    const entry = states.get(key) ?? { assetId: tr.assetId, direction, state: emptyState() };
+    states.set(key, entry);
+
+    const result = applyTrade(entry.state, tr, asset.ccy, report);
     if (result) closed.push(result);
-    if (tr.side === "buy") {
-      const spent = (tr.qty * tr.price + tr.fee) * convRate(asset.ccy, report, tr.usdIdr);
-      bought.set(tr.assetId, (bought.get(tr.assetId) ?? 0) + spent);
+    if (isOpening(direction, tr.side)) {
+      const spent = (tr.qty * tr.price + signOf(direction) * tr.fee) * convRate(asset.ccy, report, tr.usdIdr);
+      invested.set(tr.assetId, (invested.get(tr.assetId) ?? 0) + spent);
     }
   }
 
@@ -297,7 +341,7 @@ export function summarize(
   for (const c of closed) realizedByAsset.set(c.assetId, (realizedByAsset.get(c.assetId) ?? 0) + c.pnl);
 
   const positions: PositionView[] = [];
-  for (const [assetId, state] of states) {
+  for (const { assetId, direction, state } of states.values()) {
     const asset = assets.get(assetId);
     if (!asset || state.qty <= 0) continue;
 
@@ -306,8 +350,8 @@ export function summarize(
     const lastClose = market.closes.get(assetId)?.at(-1);
     const priceFromTrade = !market.live.has(assetId) && (!lastClose || now - lastClose.t > STALE_AFTER_MS);
 
-    const value = state.qty * price * convRate(asset.ccy, report, usdIdrNow);
-    const unrealized = value - state.costReport;
+    const marketValue = state.qty * price * convRate(asset.ccy, report, usdIdrNow);
+    const unrealized = direction === "long" ? marketValue - state.costReport : state.costReport - marketValue;
 
     positions.push({
       assetId,
@@ -316,11 +360,13 @@ export function summarize(
       assetClass: asset.assetClass,
       ccy: asset.ccy,
       icon: asset.icon ?? null,
+      direction,
       qty: state.qty,
       avgPrice,
+      stop: state.stop,
       price,
       priceFromTrade,
-      value,
+      value: direction === "long" ? marketValue : unrealized,
       cost: state.costReport,
       unrealized,
       unrealizedPct: state.costReport > 0 ? (unrealized / state.costReport) * 100 : 0,
@@ -329,28 +375,30 @@ export function summarize(
     });
   }
 
+  const longs = positions.filter((p) => p.direction === "long");
+  const longValue = longs.reduce((sum, p) => sum + p.value, 0);
+  const longCost = longs.reduce((sum, p) => sum + p.cost, 0);
   const value = positions.reduce((sum, p) => sum + p.value, 0);
-  const cost = positions.reduce((sum, p) => sum + p.cost, 0);
-  const unrealized = value - cost;
-  for (const p of positions) p.share = value > 0 ? (p.value / value) * 100 : 0;
+  const unrealized = value - longCost;
+  for (const p of longs) p.share = longValue > 0 ? (p.value / longValue) * 100 : 0;
   positions.sort((a, b) => b.value - a.value);
 
   const classValue = new Map<AssetClass, number>();
-  for (const p of positions) classValue.set(p.assetClass, (classValue.get(p.assetClass) ?? 0) + p.value);
+  for (const p of longs) classValue.set(p.assetClass, (classValue.get(p.assetClass) ?? 0) + p.value);
   const byClass = [...classValue.entries()]
-    .map(([assetClass, v]) => ({ assetClass, value: v, share: value > 0 ? (v / value) * 100 : 0 }))
+    .map(([assetClass, v]) => ({ assetClass, value: v, share: longValue > 0 ? (v / longValue) * 100 : 0 }))
     .sort((a, b) => b.value - a.value);
 
   const pnlByAssetMap = new Map<number, number>(realizedByAsset);
   for (const p of positions) pnlByAssetMap.set(p.assetId, (pnlByAssetMap.get(p.assetId) ?? 0) + p.unrealized);
   const pnlByAsset = [...pnlByAssetMap.entries()]
     .map(([assetId, pnl]) => {
-      const invested = bought.get(assetId) ?? 0;
+      const spent = invested.get(assetId) ?? 0;
       return {
         symbol: assets.get(assetId)?.symbol ?? "?",
         name: assets.get(assetId)?.name ?? "",
         pnl,
-        pnlPct: invested > 0 ? (pnl / invested) * 100 : 0,
+        pnlPct: spent > 0 ? (pnl / spent) * 100 : 0,
       };
     })
     .sort((a, b) => b.pnl - a.pnl);
@@ -360,9 +408,9 @@ export function summarize(
     closed,
     totals: {
       value,
-      cost,
+      cost: longCost,
       unrealized,
-      unrealizedPct: cost > 0 ? (unrealized / cost) * 100 : 0,
+      unrealizedPct: longCost > 0 ? (unrealized / longCost) * 100 : 0,
       realized: closed.reduce((sum, c) => sum + c.pnl, 0),
       fxEffect: closed.reduce((sum, c) => sum + c.fxEffect, 0),
     },
@@ -432,7 +480,7 @@ export function buildEquity(
   const sorted = sortTrades(trades);
   if (sorted.length === 0) return [];
 
-  const states = new Map<number, PositionState>();
+  const states = new Map<string, { assetId: number; direction: Direction; state: PositionState }>();
   const days: EquityDay[] = [];
   let cursor = 0;
   let realized = 0;
@@ -448,26 +496,38 @@ export function buildEquity(
       const tr = sorted[cursor++];
       const asset = assets.get(tr.assetId);
       if (!asset) continue;
-      const state = states.get(tr.assetId) ?? emptyState();
-      states.set(tr.assetId, state);
+      const direction = dirOf(tr);
+      const key = stateKey(tr.assetId, direction);
+      const entry = states.get(key) ?? { assetId: tr.assetId, direction, state: emptyState() };
+      states.set(key, entry);
 
-      const result = applyTrade(state, tr, asset.ccy, report);
+      const result = applyTrade(entry.state, tr, asset.ccy, report);
       const rate = convRate(asset.ccy, report, usdIdr);
-      if (tr.side === "buy") flow += tr.qty * tr.price * rate;
-      else if (result) {
+
+      // Arus modal ke dalam atau keluar dari posisi, supaya TWR hanya mengukur kinerja.
+      // Long: membeli memasukkan modal, menjual mengeluarkan hasil pasar.
+      // Short: tidak ada modal masuk saat membuka. Saat cover, untung rugi sebelum fee keluar sebagai arus.
+      if (isOpening(direction, tr.side)) {
+        if (direction === "long") flow += tr.qty * tr.price * rate;
+      } else if (result) {
         realized += result.pnl;
-        flow -= result.qty * tr.price * rate;
+        flow -= direction === "long" ? result.qty * tr.price * rate : result.costReport - result.qty * tr.price * rate;
       }
     }
 
     let value = 0;
     let cost = 0;
-    for (const [assetId, state] of states) {
+    for (const { assetId, direction, state } of states.values()) {
       const asset = assets.get(assetId);
       if (!asset || state.qty <= 0) continue;
       const price = markAt(market.price.get(assetId), dayEnd) ?? state.costNative / state.qty;
-      value += state.qty * price * convRate(asset.ccy, report, usdIdr);
-      cost += state.costReport;
+      const marketValue = state.qty * price * convRate(asset.ccy, report, usdIdr);
+      if (direction === "long") {
+        value += marketValue;
+        cost += state.costReport;
+      } else {
+        value += state.costReport - marketValue;
+      }
     }
 
     if (prevValue > 0) index *= (value - flow) / prevValue;

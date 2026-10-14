@@ -9,6 +9,7 @@ import {
   isAssetClass,
   type AssetClass,
   type Chain,
+  type Direction,
 } from "./shared";
 
 /** Perkiraan fee per kelas aset. Dipakai bila kolom fee dikosongkan. Sesuaikan dengan brokermu. */
@@ -24,19 +25,23 @@ export type TradeFormValue = {
   symbol: string;
   chain: Chain | null;
   contract: string | null;
+  /** Long dibuka dengan beli, short dibuka dengan jual. */
+  direction: Direction;
   side: "buy" | "sell";
   qty: string;
   price: string;
   fee: string;
   usdIdr: string | null;
   tradedAt: number;
-  /** Beli sekaligus jual (posisi ditandai close dari awal). Hanya berlaku bila side = buy. */
+  /** Buka sekaligus tutup dalam satu input (long: beli lalu jual, short: jual lalu beli). Hanya berlaku pada transaksi pembuka. */
   closed: boolean;
   closePrice: string | null;
   closeAt: number | null;
   feeClose: string | null;
   /** Untung rugi bersih isian sendiri (bisa negatif), berlaku pada transaksi yang menutup posisi. */
   pnlManual: string | null;
+  /** Stop awal khusus untuk menghitung R pada transaksi yang menutup posisi. Bukan order stop loss. */
+  riskStop: string | null;
   stopLoss: string | null;
   takeProfit: string | null;
   setup: string | null;
@@ -117,9 +122,15 @@ export function parseTradeForm(formData: FormData): Parsed {
   const side = text(formData, "side");
   if (side !== "buy" && side !== "sell") return fail("Pilih beli atau jual.");
 
-  // Tandai close hanya untuk entry beli. Jual sudah berarti menutup posisi.
-  const closed = side === "buy" && text(formData, "closed") === "on";
-  const closing = closed || side === "sell";
+  const direction: Direction = text(formData, "direction") === "short" ? "short" : "long";
+
+  // Long dibuka dengan beli, short dibuka dengan jual. Sisi lainnya sudah berarti menutup posisi.
+  const opening = (direction === "long") === (side === "buy");
+  const closeSide = side === "buy" ? "sell" : "buy";
+
+  // Tandai close hanya untuk transaksi pembuka.
+  const closed = opening && text(formData, "closed") === "on";
+  const closing = closed || !opening;
 
   let qty = decimal(text(formData, "qty"));
   if (!qty) return fail("Jumlah harus berupa angka lebih dari nol.");
@@ -165,7 +176,7 @@ export function parseTradeForm(formData: FormData): Parsed {
     closeAt = closeTime.ms;
 
     const rawFeeClose = text(formData, "feeClose");
-    if (rawFeeClose === "") feeClose = String(estimateFee(assetClass, "sell", Number(qty), Number(closePrice)));
+    if (rawFeeClose === "") feeClose = String(estimateFee(assetClass, closeSide, Number(qty), Number(closePrice)));
     else {
       feeClose = normalizedFee(rawFeeClose);
       if (feeClose === null) return fail("Fee close harus berupa angka nol atau lebih.");
@@ -179,6 +190,20 @@ export function parseTradeForm(formData: FormData): Parsed {
     if (pnlManual === null) return fail("PnL manual harus berupa angka. Pakai tanda minus di depan untuk rugi.");
   }
 
+  // Stop awal hanya untuk menghitung R. Pada close langsung posisinya harus masuk akal terhadap harga entry.
+  let riskStop: string | null = null;
+  if (closing) {
+    const rawRisk = text(formData, "riskStop");
+    if (rawRisk !== "") {
+      riskStop = decimal(rawRisk);
+      if (!riskStop) return fail("Stop awal harus berupa angka lebih dari nol.");
+      if (closed) {
+        const wrong = direction === "long" ? Number(riskStop) >= Number(price) : Number(riskStop) <= Number(price);
+        if (wrong) return fail(direction === "long" ? "Stop awal Long harus di bawah harga entry." : "Stop awal Short harus di atas harga entry.");
+      }
+    }
+  }
+
   const optionalPrice = (key: string): string | null | undefined => {
     const raw = text(formData, key);
     if (raw === "") return null;
@@ -190,6 +215,15 @@ export function parseTradeForm(formData: FormData): Parsed {
   if (stopLoss === undefined) return fail("Stop loss harus berupa angka lebih dari nol.");
   const takeProfit = closing ? null : optionalPrice("takeProfit");
   if (takeProfit === undefined) return fail("Take profit harus berupa angka lebih dari nol.");
+
+  // Long: stop di bawah entry dan target di atas. Short kebalikannya.
+  const entry = Number(price);
+  if (stopLoss && (direction === "long" ? Number(stopLoss) >= entry : Number(stopLoss) <= entry)) {
+    return fail(direction === "long" ? "Stop loss Long harus di bawah harga entry." : "Stop loss Short harus di atas harga entry.");
+  }
+  if (takeProfit && (direction === "long" ? Number(takeProfit) <= entry : Number(takeProfit) >= entry)) {
+    return fail(direction === "long" ? "Take profit Long harus di atas harga entry." : "Take profit Short harus di bawah harga entry.");
+  }
 
   const setup = text(formData, "setup").slice(0, 60) || null;
 
@@ -212,6 +246,7 @@ export function parseTradeForm(formData: FormData): Parsed {
       symbol,
       chain,
       contract,
+      direction,
       side,
       qty,
       price,
@@ -223,6 +258,7 @@ export function parseTradeForm(formData: FormData): Parsed {
       closeAt,
       feeClose,
       pnlManual,
+      riskStop,
       stopLoss,
       takeProfit,
       setup,
@@ -236,37 +272,49 @@ export function parseTradeForm(formData: FormData): Parsed {
 /** Mengubah tanggal jam WIB (ms epoch) menjadi nilai untuk input datetime-local. */
 export const toWibInput = (ms: number) => new Date(ms + WIB_OFFSET_MS).toISOString().slice(0, 16);
 
-export type PnlPreview = { pnl: number; pct: number };
+export type PnlPreview = { pnl: number; pct: number; r: number | null };
 
 /**
  * Pratinjau untung rugi bersih (mata uang aset) untuk form, memakai rumus yang sama dengan mesin hitung.
- * `avgPrice` diisi saat menutup posisi yang sudah ada (harga rata rata sudah termasuk fee beli).
+ * `avgPrice` diisi saat menutup posisi yang sudah ada (long: sudah termasuk fee beli, short: sudah setelah fee jual).
  * Fee yang kosong diperkirakan dari persentase bawaan. null bila datanya belum lengkap.
  */
 export function previewPnl(input: {
   assetClass: AssetClass;
-  kind: "roundtrip" | "sell";
+  direction?: Direction;
+  kind: "roundtrip" | "close";
   qty: number;
   entry?: number;
   close: number;
   avgPrice?: number;
   feeEntry?: number | null;
   feeClose?: number | null;
+  /** Stop awal untuk menghitung R. */
+  stop?: number | null;
 }): PnlPreview | null {
   const { assetClass, qty, close } = input;
+  const direction = input.direction ?? "long";
+  const sign = direction === "long" ? 1 : -1;
   if (!(qty > 0) || !(close > 0)) return null;
 
-  const feeOut = input.feeClose ?? estimateFee(assetClass, "sell", qty, close);
-  const proceeds = qty * close - feeOut;
+  const openSide = direction === "long" ? "buy" : "sell";
+  const closeSide = direction === "long" ? "sell" : "buy";
 
-  let cost: number;
+  const feeOut = input.feeClose ?? estimateFee(assetClass, closeSide, qty, close);
+  const closeValue = qty * close - sign * feeOut;
+
+  let openValue: number;
   if (input.kind === "roundtrip") {
     if (!input.entry || !(input.entry > 0)) return null;
-    cost = qty * input.entry + (input.feeEntry ?? estimateFee(assetClass, "buy", qty, input.entry));
+    openValue = qty * input.entry + sign * (input.feeEntry ?? estimateFee(assetClass, openSide, qty, input.entry));
   } else {
     if (!input.avgPrice || !(input.avgPrice > 0)) return null;
-    cost = qty * input.avgPrice;
+    openValue = qty * input.avgPrice;
   }
-  const pnl = proceeds - cost;
-  return { pnl, pct: (pnl / cost) * 100 };
+
+  const pnl = sign * (closeValue - openValue);
+  const avg = openValue / qty;
+  const stop = input.stop;
+  const stopOk = stop !== null && stop !== undefined && stop > 0 && (direction === "long" ? stop < avg : stop > avg);
+  return { pnl, pct: (pnl / openValue) * 100, r: stopOk ? pnl / (Math.abs(avg - (stop as number)) * qty) : null };
 }

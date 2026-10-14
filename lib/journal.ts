@@ -6,6 +6,7 @@ import {
   buildMarket,
   dayFloor,
   findOversell,
+  isOpening,
   sliceEquity,
   summarize,
   withLive,
@@ -20,7 +21,7 @@ import {
 import type { TradeFormValue } from "./journal-input";
 import { getUsdIdrAt, saveAssetIcons, type FeedAsset } from "./market-feed";
 import { fetchQuotes, fetchUsdIdrLive, type QuoteTarget } from "./quotes";
-import { CLASS_LABEL, assetIconUrl, type AssetClass, type CalendarDay, type Ccy, type LivePosition } from "./shared";
+import { CLASS_LABEL, assetIconUrl, type AssetClass, type CalendarDay, type Ccy, type Direction, type LivePosition } from "./shared";
 
 /* ============================================================
  * Membaca data
@@ -33,6 +34,7 @@ export type TradeRow = TradeInput &
     /** Ikon yang tersimpan di database (tanpa tebakan). */
     iconStored: string | null;
     takeProfit: number | null;
+    direction: Direction;
     /** Penanda pasangan beli dan jual dari satu input "tandai close". */
     linkId: string | null;
     setup: string | null;
@@ -50,7 +52,7 @@ export async function loadTradeRows(userId: string): Promise<TradeRow[]> {
            t.side, t.qty::text as qty, t.price::text as price, t.fee::text as fee, t.usd_idr::text as usd_idr,
            (extract(epoch from t.traded_at) * 1000)::bigint::text as t,
            t.stop_loss::text as stop_loss, t.take_profit::text as take_profit,
-           t.pnl_manual::text as pnl_manual, t.link_id,
+           t.pnl_manual::text as pnl_manual, t.link_id, t.direction,
            t.setup, t.emotion, t.notes, t.tags
     from journal_trades t
     join journal_assets a on a.id = t.asset_id
@@ -78,6 +80,7 @@ export async function loadTradeRows(userId: string): Promise<TradeRow[]> {
     takeProfit: optNum(r.take_profit),
     pnlManual: optNum(r.pnl_manual),
     linkId: r.link_id ?? null,
+    direction: (r.direction === "short" ? "short" : "long") as Direction,
     setup: r.setup,
     emotion: r.emotion,
     notes: r.notes,
@@ -138,6 +141,7 @@ export type HistoryRow = {
   notes: string | null;
   tags: string[];
   linkId: string | null;
+  direction: Direction;
   result: { pnl: number; pnlPct: number; r: number | null; manual: boolean } | null;
 };
 
@@ -201,6 +205,7 @@ export async function getJournal(opts: {
       notes: r.notes,
       tags: r.tags,
       linkId: r.linkId,
+      direction: r.direction,
       result: closed ? { pnl: closed.pnl, pnlPct: closed.pnlPct, r: closed.r, manual: closed.manual } : null,
     };
   });
@@ -258,13 +263,16 @@ export type InsertResult = { ok: true; asset: FeedAsset } | { ok: false; message
  * tertaut lewat link_id, dalam satu perintah INSERT sehingga tidak pernah tersimpan setengah.
  */
 export async function insertTrade(userId: string, limit: number | null, v: TradeFormValue): Promise<InsertResult> {
-  // Menutup posisi (jual) tidak pernah diblokir batas paket. Yang dihitung hanya entry baru.
-  if (v.side === "buy" && limit !== null) {
+  const opening = isOpening(v.direction, v.side);
+  const closeSide = v.side === "buy" ? "sell" : "buy";
+
+  // Menutup posisi tidak pernah diblokir batas paket. Yang dihitung hanya entry baru.
+  if (opening && limit !== null) {
     const slots = v.closed ? 2 : 1;
     const used = await countTrades(userId);
     if (used + slots > limit) {
       const message = v.closed
-        ? `Tandai close memakai 2 transaksi (beli dan jual). Sisa jatah Free: ${Math.max(0, limit - used)} dari ${limit}. Upgrade ke Premium untuk jurnal tanpa batas.`
+        ? `Tandai close memakai 2 transaksi (buka dan tutup). Sisa jatah Free: ${Math.max(0, limit - used)} dari ${limit}. Upgrade ke Premium untuk jurnal tanpa batas.`
         : `Paket Free dibatasi ${limit} transaksi. Upgrade ke Premium untuk jurnal tanpa batas.`;
       return { ok: false, message };
     }
@@ -284,6 +292,7 @@ export async function insertTrade(userId: string, limit: number | null, v: Trade
     assetId: asset.id,
     symbol: v.symbol,
     side,
+    direction: v.direction,
     qty: Number(qty),
     price: Number(price),
     fee: Number(fee),
@@ -293,36 +302,42 @@ export async function insertTrade(userId: string, limit: number | null, v: Trade
   });
   const drafts: TradeInput[] = [draft(Number.MAX_SAFE_INTEGER - 1, v.side, v.qty, v.price, v.fee, v.tradedAt, entryRate)];
   if (v.closed && v.closePrice !== null && v.closeAt !== null && v.feeClose !== null && closeRate !== null) {
-    drafts.push(draft(Number.MAX_SAFE_INTEGER, "sell", v.qty, v.closePrice, v.feeClose, v.closeAt, closeRate));
+    drafts.push(draft(Number.MAX_SAFE_INTEGER, closeSide, v.qty, v.closePrice, v.feeClose, v.closeAt, closeRate));
   }
 
   const existing = (await loadTradeRows(userId)).filter((r) => r.assetId === asset.id);
   if (findOversell([...existing, ...drafts])) {
-    return { ok: false, message: "Jumlah jual melebihi posisi yang kamu pegang pada waktu itu." };
+    return {
+      ok: false,
+      message: v.direction === "short" ? "Jumlah cover melebihi posisi short yang kamu pegang pada waktu itu." : "Jumlah jual melebihi posisi yang kamu pegang pada waktu itu.",
+    };
   }
 
   if (!v.closed) {
+    // Pada transaksi pembuka, stop adalah stop loss. Pada transaksi penutup, stop adalah stop awal untuk R.
+    const stop = opening ? v.stopLoss : v.riskStop;
     await db()`
       insert into journal_trades
-        (user_id, asset_id, side, qty, price, fee, usd_idr, traded_at, stop_loss, take_profit, pnl_manual, setup, emotion, notes, tags)
+        (user_id, asset_id, side, direction, qty, price, fee, usd_idr, traded_at, stop_loss, take_profit, pnl_manual, setup, emotion, notes, tags)
       values
-        (${userId}, ${asset.id}::bigint, ${v.side}, ${v.qty}::numeric, ${v.price}::numeric, ${v.fee}::numeric,
+        (${userId}, ${asset.id}::bigint, ${v.side}, ${v.direction}, ${v.qty}::numeric, ${v.price}::numeric, ${v.fee}::numeric,
          ${entryRate}::numeric, to_timestamp(${v.tradedAt}::double precision / 1000),
-         ${v.stopLoss}::numeric, ${v.takeProfit}::numeric, ${v.pnlManual}::numeric,
+         ${stop}::numeric, ${v.takeProfit}::numeric, ${v.pnlManual}::numeric,
          ${v.setup}::text, ${v.emotion}::text, ${v.notes}::text, ${v.tags}::text[])`;
     return { ok: true, asset };
   }
 
-  // Catatan jurnal (setup, emosi, tag, catatan) ikut baris entry. Baris close hanya membawa hasilnya.
+  // Satu perintah INSERT untuk dua baris, supaya tidak pernah tersimpan setengah.
+  // Catatan jurnal (setup, emosi, tag, catatan) dan stop awal ikut baris pembuka. Baris penutup membawa hasilnya.
   const link = randomUUID();
   await db()`
     insert into journal_trades
-      (user_id, asset_id, side, qty, price, fee, usd_idr, traded_at, stop_loss, take_profit, pnl_manual, link_id, setup, emotion, notes, tags)
+      (user_id, asset_id, side, direction, qty, price, fee, usd_idr, traded_at, stop_loss, take_profit, pnl_manual, link_id, setup, emotion, notes, tags)
     values
-      (${userId}, ${asset.id}::bigint, 'buy', ${v.qty}::numeric, ${v.price}::numeric, ${v.fee}::numeric,
+      (${userId}, ${asset.id}::bigint, ${v.side}, ${v.direction}, ${v.qty}::numeric, ${v.price}::numeric, ${v.fee}::numeric,
        ${entryRate}::numeric, to_timestamp(${v.tradedAt}::double precision / 1000),
-       null, null, null, ${link}::text, ${v.setup}::text, ${v.emotion}::text, ${v.notes}::text, ${v.tags}::text[]),
-      (${userId}, ${asset.id}::bigint, 'sell', ${v.qty}::numeric, ${v.closePrice}::numeric, ${v.feeClose}::numeric,
+       ${v.riskStop}::numeric, null, null, ${link}::text, ${v.setup}::text, ${v.emotion}::text, ${v.notes}::text, ${v.tags}::text[]),
+      (${userId}, ${asset.id}::bigint, ${closeSide}, ${v.direction}, ${v.qty}::numeric, ${v.closePrice}::numeric, ${v.feeClose}::numeric,
        ${closeRate}::numeric, to_timestamp(${v.closeAt}::double precision / 1000),
        null, null, ${v.pnlManual}::numeric, ${link}::text, null, null, null, '{}'::text[])`;
   return { ok: true, asset };
@@ -360,25 +375,28 @@ export type CloseTarget = {
   symbol: string;
   assetClass: AssetClass;
   ccy: Ccy;
-  /** Jumlah yang masih dipegang (satuan terkecil). */
+  direction: Direction;
+  /** Jumlah yang masih terbuka (satuan terkecil). */
   qty: number;
-  /** Harga rata rata dalam mata uang aset (sudah termasuk fee beli). */
+  /** Harga rata rata dalam mata uang aset (long: termasuk fee beli, short: harga jual bersih). */
   avgPrice: number;
+  /** Stop awal posisi untuk R, bila ada. */
+  stop: number | null;
   /** Harga terkini bila tersedia, kalau tidak harga transaksi terakhir. */
   price: number;
   chain: string | null;
   contract: string | null;
 };
 
-/** Bahan pengisian form untuk menutup satu posisi. null bila posisinya tidak ada lagi. */
-export async function getCloseTarget(userId: string, assetId: number): Promise<CloseTarget | null> {
+/** Bahan pengisian form untuk menutup satu posisi (long atau short). null bila posisinya tidak ada lagi. */
+export async function getCloseTarget(userId: string, assetId: number, direction: Direction = "long"): Promise<CloseTarget | null> {
   const rows = (await loadTradeRows(userId)).filter((r) => r.assetId === assetId);
   if (rows.length === 0) return null;
 
   const first = rows[0];
   const meta: AssetMeta = { id: assetId, symbol: first.symbol, name: first.name, assetClass: first.assetClass, ccy: first.ccy };
   const summary = summarize(rows, new Map([[assetId, meta]]), buildMarket(rows, new Map(), []), "IDR", Date.now());
-  const position = summary.positions[0];
+  const position = summary.positions.find((p) => p.direction === direction);
   if (!position) return null;
 
   const quotes = await withTimeout(fetchQuotes(openTargets(rows), 15_000), 1500, new Map());
@@ -387,8 +405,10 @@ export async function getCloseTarget(userId: string, assetId: number): Promise<C
     symbol: first.symbol,
     assetClass: first.assetClass,
     ccy: first.ccy,
+    direction,
     qty: position.qty,
     avgPrice: position.avgPrice,
+    stop: position.stop,
     price: quotes.get(assetId)?.price ?? position.price,
     chain: first.chain,
     contract: first.assetClass === "meme" ? first.priceRef : null,
@@ -401,19 +421,24 @@ export async function getCloseTarget(userId: string, assetId: number): Promise<C
 
 /** Aset yang masih punya sisa posisi, sebagai target pengambilan harga. */
 export function openTargets(rows: TradeRow[]): QuoteTarget[] {
-  const held = new Map<number, number>();
+  const held = new Map<string, number>();
   const meta = new Map<number, TradeRow>();
   for (const r of [...rows].sort((a, b) => a.t - b.t || a.id - b.id)) {
-    held.set(r.assetId, (held.get(r.assetId) ?? 0) + (r.side === "buy" ? r.qty : -r.qty));
+    const key = `${r.assetId}:${r.direction}`;
+    held.set(key, (held.get(key) ?? 0) + (isOpening(r.direction, r.side) ? r.qty : -r.qty));
     meta.set(r.assetId, r);
   }
-  const targets: QuoteTarget[] = [];
-  for (const [assetId, qty] of held) {
+
+  const openAssets = new Set<number>();
+  for (const [key, qty] of held) {
+    const assetId = Number(key.split(":")[0]);
     const r = meta.get(assetId);
-    if (!r || qty <= 1e-9 * Math.max(1, r.qty)) continue;
-    targets.push({ assetId, assetClass: r.assetClass, symbol: r.symbol, chain: r.chain, priceRef: r.priceRef });
+    if (r && qty > 1e-9 * Math.max(1, r.qty)) openAssets.add(assetId);
   }
-  return targets;
+  return [...openAssets].map((assetId) => {
+    const r = meta.get(assetId) as TradeRow;
+    return { assetId, assetClass: r.assetClass, symbol: r.symbol, chain: r.chain, priceRef: r.priceRef };
+  });
 }
 
 const withTimeout = <T,>(job: Promise<T>, ms: number, fallback: T) =>
@@ -471,6 +496,7 @@ export async function getPortfolio(opts: {
       name: p.name,
       assetClass: p.assetClass,
       ccy: p.ccy,
+      direction: p.direction,
       qty: p.qty,
       avgPrice: p.avgPrice,
       costReport: p.cost,
@@ -560,6 +586,7 @@ export async function getCalendar(opts: { userId: string; report: Ccy; months: n
     day.trades.push({
       symbol: c.symbol,
       assetClass: assets.get(c.assetId)?.assetClass ?? "idx",
+      direction: c.direction,
       qty: c.qty,
       pnl: c.pnl,
       pnlPct: c.pnlPct,
