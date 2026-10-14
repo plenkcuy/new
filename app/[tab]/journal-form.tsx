@@ -17,6 +17,7 @@ import {
   money,
   type AssetClass,
   type Ccy,
+  type Direction,
   type JournalFormState,
 } from "@/lib/shared";
 
@@ -53,8 +54,10 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
     : "";
 
   const [assetClass, setAssetClass] = useState<AssetClass>(closeTarget?.assetClass ?? "idx");
-  const [side, setSide] = useState<"buy" | "sell">(closeTarget ? "sell" : "buy");
+  const [direction, setDirection] = useState<Direction>(closeTarget?.direction ?? "long");
+  const [action, setAction] = useState<"open" | "close">(closeTarget ? "close" : "open");
   const [closed, setClosed] = useState(false);
+  const [riskStop, setRiskStop] = useState("");
   const [pnlMode, setPnlMode] = useState<"auto" | "manual">("auto");
   const [unit, setUnit] = useState<"lot" | "share">(initialUnit);
   const [qty, setQty] = useState(initialQty);
@@ -77,6 +80,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
     setFee("");
     setFeeClose("");
     setPnlManual("");
+    setRiskStop("");
     setClosed(false);
     setPnlMode("auto");
     if (closeTarget) router.replace("/journal", { scroll: false });
@@ -84,36 +88,44 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
 
   const ccy: Ccy = assetClass === "idx" ? "IDR" : "USD";
   const quote = ccy === "IDR" ? "Rp" : "USD";
-  const closing = closed || side === "sell";
+  // Long dibuka dengan beli dan ditutup dengan jual. Short sebaliknya.
+  const side: "buy" | "sell" = (direction === "long") === (action === "open") ? "buy" : "sell";
+  const closing = closed || action === "close";
   const lots = assetClass === "idx" && unit === "lot";
   const qtyUnits = toNum(qty) * (lots ? IDX_LOT : 1);
+
+  const stopValue = optNum(riskStop) ?? closeTarget?.stop ?? null;
 
   const preview = useMemo(() => {
     if (!closing) return null;
     if (closed) {
       return previewPnl({
         assetClass,
+        direction,
         kind: "roundtrip",
         qty: qtyUnits,
         entry: toNum(price),
         close: toNum(closePrice),
         feeEntry: optNum(fee),
         feeClose: optNum(feeClose),
+        stop: optNum(riskStop),
       });
     }
     return previewPnl({
       assetClass,
-      kind: "sell",
+      direction,
+      kind: "close",
       qty: qtyUnits,
       close: toNum(price),
       avgPrice: closeTarget?.avgPrice,
       feeClose: optNum(fee),
+      stop: stopValue,
     });
-  }, [closing, closed, assetClass, qtyUnits, price, closePrice, fee, feeClose, closeTarget?.avgPrice]);
+  }, [closing, closed, assetClass, direction, qtyUnits, price, closePrice, fee, feeClose, riskStop, stopValue, closeTarget?.avgPrice]);
 
   // Entry baru dibatasi paket. Menutup posisi (jual) tidak pernah dibatasi.
   const slots = closed ? 2 : 1;
-  const blocked = side === "buy" && limit !== null && used + slots > limit;
+  const blocked = action === "open" && limit !== null && used + slots > limit;
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -121,21 +133,22 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
     startTransition(() => dispatch(data));
   };
 
-  const priceLabel = closed ? "Harga entry" : side === "sell" ? "Harga close" : "Harga";
-  const timeLabel = closed ? "Waktu entry (WIB)" : side === "sell" ? "Waktu close (WIB)" : "Waktu transaksi (WIB)";
-  const submitLabel = pending ? "Menyimpan" : closed ? "Simpan entry dan close" : side === "sell" ? "Simpan close" : "Simpan transaksi";
+  const priceLabel = closed ? "Harga entry" : action === "close" ? "Harga close" : "Harga";
+  const timeLabel = closed ? "Waktu entry (WIB)" : action === "close" ? "Waktu close (WIB)" : "Waktu transaksi (WIB)";
+  const submitLabel = pending ? "Menyimpan" : closed ? "Simpan entry dan close" : action === "close" ? "Simpan close" : "Simpan transaksi";
 
   return (
     <form ref={formRef} onSubmit={submit} className="flex flex-col gap-5 [color-scheme:dark]" key={closeTarget?.assetId ?? "baru"}>
       <input type="hidden" name="assetClass" value={assetClass} />
       <input type="hidden" name="side" value={side} />
+      <input type="hidden" name="direction" value={direction} />
       <input type="hidden" name="pnlMode" value={closing ? pnlMode : "auto"} />
       {closed && <input type="hidden" name="closed" value="on" />}
 
       {closeTarget ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] p-4 text-sm">
           <span>
-            Menutup posisi <strong>{closeTarget.symbol}</strong>. Isian sudah dibuat dari posisimu, ubah jumlah bila hanya menutup sebagian.
+            Menutup posisi {closeTarget.direction === "short" ? "short" : "long"} <strong>{closeTarget.symbol}</strong>. Isian sudah dibuat dari posisimu, ubah jumlah bila hanya menutup sebagian.
           </span>
           <Link href="/journal" className="pill">
             Batal
@@ -172,21 +185,42 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
         </div>
 
         <div>
-          <span className={label}>Sisi</span>
+          <span className={label}>Arah</span>
           <div className="flex gap-2">
+            <button type="button" className="pill flex-1" data-active={direction === "long"} disabled={Boolean(closeTarget)} onClick={() => setDirection("long")}>
+              Long
+            </button>
+            <button type="button" className="pill flex-1" data-active={direction === "short"} disabled={Boolean(closeTarget)} onClick={() => setDirection("short")}>
+              Short
+            </button>
+          </div>
+          <div className="mt-2 flex gap-2">
             <button
               type="button"
               className="pill flex-1"
-              data-active={side === "buy"}
+              data-active={action === "open"}
               disabled={Boolean(closeTarget)}
-              onClick={() => setSide("buy")}
+              onClick={() => setAction("open")}
             >
-              Beli
+              Buka
             </button>
-            <button type="button" className="pill flex-1" data-active={side === "sell"} onClick={() => { setSide("sell"); setClosed(false); }}>
-              Jual
+            <button
+              type="button"
+              className="pill flex-1"
+              data-active={action === "close"}
+              onClick={() => {
+                setAction("close");
+                setClosed(false);
+              }}
+            >
+              Tutup
             </button>
           </div>
+          <p className="mt-1.5 text-[11px] text-[var(--muted)]" data-testid="side-caption">
+            Dicatat sebagai {side === "buy" ? "beli" : "jual"}
+            {direction === "short" && action === "open" ? " (membuka short)" : ""}
+            {direction === "short" && action === "close" ? " (cover short)" : ""}
+          </p>
         </div>
 
         <div>
@@ -238,12 +272,12 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
         </div>
       </div>
 
-      {side === "buy" && !closeTarget && (
+      {action === "open" && !closeTarget && (
         <div className="flex items-start justify-between gap-4 rounded-2xl border border-[var(--line)] p-4">
           <div>
             <div className="text-sm">Tandai close</div>
             <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-              Catat entry dan close sekaligus untuk posisi yang sudah selesai. Hasilnya langsung masuk ke Kalender dan statistik.
+              Catat entry dan close sekaligus untuk posisi {direction === "short" ? "short" : "long"} yang sudah selesai. Hasilnya langsung masuk ke Kalender dan statistik.
               {closed && " Stop loss dan take profit dinonaktifkan."}
             </p>
           </div>
@@ -351,13 +385,19 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
                   <span className={`ml-2 text-xs ${preview.pnl >= 0 ? "up" : "down"}`}>
                     {minus(`${preview.pct >= 0 ? "+" : ""}${preview.pct.toFixed(2).replace(".", ",")}%`)}
                   </span>
+                  {preview.r !== null && (
+                    <span className={`ml-3 text-xs ${preview.r >= 0 ? "up" : "down"}`} data-testid="r-preview">
+                      {minus(`${preview.r >= 0 ? "+" : ""}${preview.r.toFixed(2).replace(".", ",")}R`)}
+                    </span>
+                  )}
                   <p className="mt-1 text-[11px] text-[var(--muted)]">
                     Sudah dikurangi fee{closed ? " entry dan close" : ""}. Fee yang kosong diperkirakan dari persentase bawaan.
+                    {direction === "short" && " Short dihitung tanpa margin, bunga, atau funding. Pakai PnL manual bila perlu."}
                   </p>
                 </>
               ) : (
                 <p className="text-xs leading-relaxed text-[var(--muted)]">
-                  {side === "sell" && !closeTarget
+                  {action === "close" && !closeTarget
                     ? "Dihitung otomatis saat disimpan, dari harga rata rata posisimu dikurangi fee."
                     : "Isi jumlah dan harga untuk melihat perkiraan hasil."}
                 </p>
@@ -384,6 +424,27 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
               </p>
             </div>
           )}
+
+          <div className="mt-4 border-t border-white/5 pt-4">
+            <label className={label} htmlFor="riskStop">
+              Stop awal ({quote}), opsional
+            </label>
+            <input
+              id="riskStop"
+              name="riskStop"
+              inputMode="decimal"
+              autoComplete="off"
+              className={`${field} sm:max-w-xs`}
+              value={riskStop}
+              onChange={(e) => setRiskStop(e.target.value)}
+              placeholder={closeTarget?.stop ? plain(closeTarget.stop) : ""}
+            />
+            <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+              Hanya untuk menghitung R (hasil dibanding risiko awal), bukan order stop loss.
+              {closeTarget?.stop ? " Kosongkan untuk memakai stop awal posisi ini." : ""}
+              {direction === "short" ? " Untuk short, stop berada di atas harga entry." : " Untuk long, stop berada di bawah harga entry."}
+            </p>
+          </div>
         </div>
       )}
 
@@ -433,7 +494,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
           </div>
           {closing && (
             <p className="text-[11px] leading-relaxed text-[var(--muted)] sm:col-span-2 xl:col-span-4" data-testid="sltp-note">
-              Stop loss dan take profit nonaktif karena {closed ? "posisi ditandai close" : "ini transaksi jual"}. Risiko dihitung dari stop loss yang kamu isi saat entry.
+              Stop loss dan take profit nonaktif karena {closed ? "posisi ditandai close" : "ini transaksi penutup posisi"}. Untuk menghitung R, isi Stop awal di blok Hasil.
             </p>
           )}
           <div>

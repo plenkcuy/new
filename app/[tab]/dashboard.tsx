@@ -147,7 +147,11 @@ function AiInsights() {
 /** Ringkasan 4 posisi terbesar. Rincian lengkap ada di /portfolio. */
 function PortfolioCard({ positions, usdIdr }: { positions: LivePosition[]; usdIdr: number }) {
   const top = positions
-    .map((p) => ({ ...p, idrValue: p.qty * p.price * convRate(p.ccy, "IDR", usdIdr) }))
+    .map((p) => {
+      const market = p.qty * p.price * convRate(p.ccy, "IDR", usdIdr);
+      // Short: nilai = untung rugi belum terealisasi (sudah dihitung server dalam rupiah).
+      return { ...p, idrValue: p.direction === "short" ? p.value : market };
+    })
     .sort((a, b) => b.idrValue - a.idrValue)
     .slice(0, 4);
 
@@ -186,7 +190,10 @@ function PortfolioCard({ positions, usdIdr }: { positions: LivePosition[]; usdId
                 <AssetIcon symbol={h.symbol} color={CLASS_COLOR[h.assetClass]} icon={h.icon} size={32} />
               </div>
               <div className="mt-3 flex items-center justify-between text-[11px] text-[var(--muted)]">
-                <span className="text-[var(--text)]">{h.symbol}</span>
+                <span className="text-[var(--text)]">
+                  {h.symbol}
+                  {h.direction === "short" && " (short)"}
+                </span>
                 <span>{h.assetClass === "idx" ? `${num(h.qty / 100)} lot` : quantity(h.qty)}</span>
               </div>
             </article>

@@ -100,7 +100,8 @@ export async function JournalScreen({ user, query }: ScreenProps) {
 
   // Tombol Tutup di tabel posisi mengisi form dari posisi yang dimaksud.
   const closeId = Number(query.close);
-  const closeTarget = Number.isSafeInteger(closeId) && closeId > 0 ? await getCloseTarget(user.id, closeId) : null;
+  const closeDirection = query.dir === "short" ? "short" : "long";
+  const closeTarget = Number.isSafeInteger(closeId) && closeId > 0 ? await getCloseTarget(user.id, closeId, closeDirection) : null;
 
   const slices = summary.byClass.map((c) => ({
     label: CLASS_LABEL[c.assetClass],
@@ -120,7 +121,7 @@ export async function JournalScreen({ user, query }: ScreenProps) {
       )}
 
       <details id="form" className="card scroll-mt-24 p-6 [&_summary]:cursor-pointer" open={empty || closeTarget !== null}>
-        <summary className="text-lg">{closeTarget ? `Tutup posisi ${closeTarget.symbol}` : "Catat transaksi baru"}</summary>
+        <summary className="text-lg">{closeTarget ? `Tutup posisi ${closeTarget.direction === "short" ? "short " : ""}${closeTarget.symbol}` : "Catat transaksi baru"}</summary>
         <div className="mt-5">
           <TradeForm used={data.totalTrades} limit={limits.journalTrades} closeTarget={closeTarget} />
         </div>
@@ -248,7 +249,10 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
                   <div className="flex items-center gap-3">
                     <AssetIcon symbol={p.symbol} color={CLASS_COLOR[p.assetClass]} icon={p.icon} size={32} />
                     <div>
-                      <div>{p.symbol}</div>
+                      <div>
+                        {p.symbol}
+                        {p.direction === "short" && <span className="badge badge-premium ml-2">Short</span>}
+                      </div>
                       <div className="text-[11px] text-[var(--muted)]">{CLASS_LABEL[p.assetClass]}</div>
                     </div>
                   </div>
@@ -265,14 +269,16 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
                     </div>
                   )}
                 </td>
-                <td className="num">{money(p.value, report)}</td>
+                <td className="num" title={p.direction === "short" ? "Posisi short: nilai = untung rugi belum terealisasi (tanpa margin)" : undefined}>
+                  {money(p.value, report)}
+                </td>
                 <td className={`num ${tone(p.unrealized)}`}>
                   {money(p.unrealized, report)}
                   <div className="text-[11px]">{pct(p.unrealizedPct)}</div>
                 </td>
-                <td className="num">{decimal(p.share, 1)}%</td>
+                <td className="num">{p.direction === "short" ? "" : `${decimal(p.share, 1)}%`}</td>
                 <td>
-                  <Link href={`/journal?close=${p.assetId}#form`} className="pill" aria-label={`Tutup posisi ${p.symbol}`}>
+                  <Link href={`/journal?close=${p.assetId}${p.direction === "short" ? "&dir=short" : ""}#form`} className="pill" aria-label={`Tutup posisi ${p.direction === "short" ? "short " : ""}${p.symbol}`}>
                     Tutup
                   </Link>
                 </td>
@@ -329,7 +335,7 @@ function HistoryTable({
                     </div>
                   </td>
                   <td className={r.side === "buy" ? "up" : "down"}>
-                    {r.side === "buy" ? "Beli" : "Jual"}
+                    {r.direction === "short" ? (r.side === "sell" ? "Short" : "Cover") : r.side === "buy" ? "Beli" : "Jual"}
                     {r.linkId && (
                       <div className="mt-1">
                         <span className="badge badge-free" title="Dibuat dari satu input tandai close">

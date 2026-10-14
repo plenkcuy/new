@@ -272,7 +272,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
                         <div>
                           <div className="font-semibold">{t.symbol}</div>
                           <div className="text-[11px] text-[var(--muted)]">
-                            {CLASS_LABEL[t.assetClass]} · jual {t.assetClass === "idx" ? `${num(t.qty / IDX_LOT)} lot` : quantity(t.qty)}
+                            {CLASS_LABEL[t.assetClass]} · {t.direction === "short" ? "cover" : "jual"} {t.assetClass === "idx" ? `${num(t.qty / IDX_LOT)} lot` : quantity(t.qty)}
                           </div>
                         </div>
                         <div className={`text-right ${t.pnl >= 0 ? "up" : "down"}`}>

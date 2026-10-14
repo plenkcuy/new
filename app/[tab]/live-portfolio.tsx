@@ -177,8 +177,10 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
     const list = positions.map((p) => {
       const live = quotes[p.assetId];
       const price = live?.price ?? p.price;
-      const value = p.qty * price * convRate(p.ccy, report, usdIdr);
-      const unrealized = value - p.costReport;
+      const marketValue = p.qty * price * convRate(p.ccy, report, usdIdr);
+      // Short bukan aset yang dibeli: nilainya adalah untung rugi belum terealisasi (tanpa margin).
+      const unrealized = p.direction === "short" ? p.costReport - marketValue : marketValue - p.costReport;
+      const value = p.direction === "short" ? unrealized : marketValue;
       return {
         ...p,
         price,
@@ -191,23 +193,24 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
         share: 0,
       };
     });
-    const total = list.reduce((sum, r) => sum + r.value, 0);
-    for (const r of list) r.share = total > 0 ? (r.value / total) * 100 : 0;
+    const longTotal = list.reduce((sum, r) => sum + (r.direction === "short" ? 0 : r.value), 0);
+    for (const r of list) r.share = r.direction !== "short" && longTotal > 0 ? (r.value / longTotal) * 100 : 0;
     return list.sort((a, b) => b.value - a.value);
   }, [positions, quotes, usdIdr, report]);
 
   const totalValue = rows.reduce((sum, r) => sum + r.value, 0);
-  const totalCost = rows.reduce((sum, r) => sum + r.costReport, 0);
+  const totalCost = rows.reduce((sum, r) => sum + (r.direction === "short" ? 0 : r.costReport), 0);
   const unrealized = totalValue - totalCost;
 
   const slices = useMemo(() => {
     const byClass = new Map<keyof typeof CLASS_LABEL, number>();
-    for (const r of rows) byClass.set(r.assetClass, (byClass.get(r.assetClass) ?? 0) + r.value);
+    for (const r of rows) if (r.direction !== "short") byClass.set(r.assetClass, (byClass.get(r.assetClass) ?? 0) + r.value);
+    const longValue = [...byClass.values()].reduce((a, b) => a + b, 0);
     return [...byClass.entries()]
       .map(([cls, value]) => ({
         label: CLASS_LABEL[cls],
         value,
-        share: totalValue > 0 ? (value / totalValue) * 100 : 0,
+        share: longValue > 0 ? (value / longValue) * 100 : 0,
         color: CLASS_COLOR[cls],
       }))
       .sort((a, b) => b.value - a.value);
@@ -280,12 +283,15 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.assetId}>
+                <tr key={`${r.assetId}${r.direction}`}>
                   <td>
                     <div className="flex items-center gap-3">
                       <AssetIcon symbol={r.symbol} color={CLASS_COLOR[r.assetClass]} icon={r.icon} size={32} />
                       <div>
-                        <div>{r.symbol}</div>
+                        <div>
+                          {r.symbol}
+                          {r.direction === "short" && <span className="badge badge-premium ml-2">Short</span>}
+                        </div>
                         <div className="text-[11px] text-[var(--muted)]">{CLASS_LABEL[r.assetClass]}</div>
                       </div>
                     </div>
@@ -308,9 +314,9 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
                     {money(r.unrealized, report)}
                     <div className="text-[11px]">{pct(r.unrealizedPct)}</div>
                   </td>
-                  <td className="num">{decimal(r.share, 1)}%</td>
+                  <td className="num">{r.direction === "short" ? "" : `${decimal(r.share, 1)}%`}</td>
                   <td>
-                    <Link href={`/journal?close=${r.assetId}#form`} className="pill" aria-label={`Tutup posisi ${r.symbol}`}>
+                    <Link href={`/journal?close=${r.assetId}${r.direction === "short" ? "&dir=short" : ""}#form`} className="pill" aria-label={`Tutup posisi ${r.direction === "short" ? "short " : ""}${r.symbol}`}>
                       Tutup
                     </Link>
                   </td>
