@@ -39,6 +39,7 @@ create table if not exists journal_trades (
   tags        text[] not null default '{}',
   pnl_manual  numeric(38, 18),
   link_id     text,
+  direction   text not null default 'long' check (direction in ('long', 'short')),
   created_at  timestamptz not null default now()
 );
 
@@ -47,6 +48,11 @@ create table if not exists journal_trades (
 -- link_id: menautkan baris beli dan jual yang dibuat dari satu input "tandai close".
 alter table journal_trades add column if not exists pnl_manual numeric(38, 18);
 alter table journal_trades add column if not exists link_id text;
+-- direction: long dibuka dengan beli, short dibuka dengan jual. Long dan short pada aset yang sama dihitung terpisah.
+alter table journal_trades add column if not exists direction text not null default 'long';
+do $$ begin
+  alter table journal_trades add constraint journal_trades_direction_check check (direction in ('long', 'short'));
+exception when duplicate_object then null; end $$;
 create index if not exists journal_trades_link on journal_trades (user_id, link_id) where link_id is not null;
 
 create index if not exists journal_trades_user_time on journal_trades (user_id, traded_at desc);
