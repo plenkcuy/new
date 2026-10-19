@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { AssetIcon } from "@/components/asset-icon";
+import { FitText } from "@/components/fit-text";
 import { PageHeader } from "@/components/ui";
 import { MARKET_MAX_AGE_MS, deniedRedirect, limitsFor } from "@/lib/access";
 import { getMarketPage } from "@/lib/market-lists";
@@ -70,7 +71,11 @@ export async function MarketScreen({ user, query }: ScreenProps) {
           {page.overview.slice(0, 8).map((o) => (
             <div key={`${o.group}${o.name}`} className="card p-5">
               <div className="text-xs text-[var(--muted)]">{o.group ? `${o.group} · ${o.name}` : o.name}</div>
-              <div className="mt-2 text-2xl font-medium tracking-tight">{o.value}</div>
+              <div className="mt-2 font-medium tracking-tight">
+                <FitText max={24} min={13}>
+                  {o.value}
+                </FitText>
+              </div>
               {o.changePct !== null && <div className={`mt-1 text-xs ${o.changePct >= 0 ? "up" : "down"}`}>{pct(o.changePct)}</div>}
             </div>
           ))}
@@ -95,7 +100,7 @@ export async function MarketScreen({ user, query }: ScreenProps) {
                 : "Data pasar sedang dimuat. Muat ulang beberapa detik lagi."}
           </p>
         ) : (
-          <table className="data-table">
+          <table className="data-table stack">
             <thead>
               <tr>
                 <th>Aset</th>
@@ -108,7 +113,7 @@ export async function MarketScreen({ user, query }: ScreenProps) {
             <tbody>
               {page.items.map((i) => (
                 <tr key={i.symbol}>
-                  <td>
+                  <td data-full>
                     <div className="flex items-center gap-3">
                       <AssetIcon symbol={i.symbol} color={MARKET_COLOR[market]} icon={i.icon} size={32} />
                       <div>
@@ -117,12 +122,12 @@ export async function MarketScreen({ user, query }: ScreenProps) {
                       </div>
                     </div>
                   </td>
-                  <td className="num">{unitPrice(i.price, i.ccy)}</td>
-                  <td className={`num ${(i.changePct ?? 0) >= 0 ? "up" : "down"}`}>{i.changePct === null ? "" : pct(i.changePct)}</td>
+                  <td className="num" data-label="Harga">{unitPrice(i.price, i.ccy)}</td>
+                  <td className={`num ${(i.changePct ?? 0) >= 0 ? "up" : "down"}`} data-label="Perubahan">{i.changePct === null ? "" : pct(i.changePct)}</td>
                   {show7d && (
-                    <td className={`num ${(i.change7d ?? 0) >= 0 ? "up" : "down"}`}>{i.change7d === null ? "" : pct(i.change7d)}</td>
+                    <td className={`num ${(i.change7d ?? 0) >= 0 ? "up" : "down"}`} data-label="7 hari">{i.change7d === null ? "" : pct(i.change7d)}</td>
                   )}
-                  {showCap && <td className="num text-[var(--muted)]">{i.capLabel ?? ""}</td>}
+                  {showCap && <td className="num text-[var(--muted)]" data-label="Kapitalisasi">{i.capLabel ?? ""}</td>}
                 </tr>
               ))}
             </tbody>

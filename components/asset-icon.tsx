@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SymbolDot } from "./ui";
 
 /** Ikon aset dari sumber data. Bila kosong atau gagal dimuat, kembali ke huruf kode aset. */
@@ -16,6 +16,13 @@ export function AssetIcon({
   size?: number;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
+  const image = useRef<HTMLImageElement>(null);
+
+  // Gambar yang gagal dimuat sebelum halaman aktif tidak memicu onError, jadi diperiksa lagi saat mount.
+  useEffect(() => {
+    const el = image.current;
+    if (icon && el && el.complete && el.naturalWidth === 0) setFailed(icon);
+  }, [icon]);
 
   if (!icon || failed === icon) return <SymbolDot symbol={symbol} color={color} size={size} />;
 
@@ -25,6 +32,7 @@ export function AssetIcon({
       style={{ width: size, height: size }}
     >
       <img
+        ref={image}
         src={icon}
         alt=""
         width={size}

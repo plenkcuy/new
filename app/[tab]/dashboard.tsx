@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { AssetIcon } from "@/components/asset-icon";
+import { FitText } from "@/components/fit-text";
 import { PageHeader, UpgradeCard } from "@/components/ui";
 import { MARKET_MAX_AGE_MS, can, limitsFor } from "@/lib/access";
 import { getPortfolio } from "@/lib/journal";
@@ -59,7 +60,7 @@ export async function DashboardScreen({ user, query }: ScreenProps) {
       {header}
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-[1fr_1.05fr_1fr]">
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <TotalHolding value={portfolio.totals.value} unrealizedPct={portfolio.totals.unrealizedPct} hasTrades={portfolio.totalTrades > 0} />
           {can(user.tier, "ai-insights") ? (
             <AiInsights />
@@ -76,7 +77,7 @@ export async function DashboardScreen({ user, query }: ScreenProps) {
 
         <Watchlist markets={watchlist} />
 
-        <div className="md:col-span-2 xl:col-span-1">
+        <div className="min-w-0 md:col-span-2 xl:col-span-1">
           <PortfolioCard positions={portfolio.positions} usdIdr={portfolio.usdIdr} />
         </div>
       </div>
@@ -99,7 +100,11 @@ function TotalHolding({ value, unrealizedPct, hasTrades }: { value: number; unre
       </div>
 
       <div className="mt-6">
-        <div className="text-3xl font-medium tracking-tight sm:text-[34px]">{idr(value)}</div>
+        <div className="font-medium tracking-tight">
+          <FitText max={34} min={18}>
+            {idr(value)}
+          </FitText>
+        </div>
         {hasTrades ? (
           <div className={`mt-1 text-sm ${unrealizedPct >= 0 ? "up" : "down"}`}>
             {pct(unrealizedPct)} <span className="text-[var(--muted)]">untung rugi dari modal</span>
@@ -157,13 +162,13 @@ function PortfolioCard({ positions, usdIdr }: { positions: LivePosition[]; usdId
 
   return (
     <section className="card p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg">Portofolioku</h2>
-        <div className="flex items-center gap-2">
-          <Link href="/portfolio" className="pill">
+        <div className="flex shrink-0 items-center gap-2">
+          <Link href="/portfolio" className="pill whitespace-nowrap">
             Lihat semua
           </Link>
-          <Link href="/portfolio" className="icon-btn h-9! w-9!" aria-label="Buka portofolio">
+          <Link href="/portfolio" className="icon-btn h-9! w-9! max-sm:hidden" aria-label="Buka portofolio">
             <ArrowUpRight size={16} />
           </Link>
         </div>
@@ -181,10 +186,14 @@ function PortfolioCard({ positions, usdIdr }: { positions: LivePosition[]; usdId
         <div className="mt-4 grid grid-cols-2 gap-3">
           {top.map((h) => (
             <article
-              key={h.assetId}
-              className="flex flex-col rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] p-4"
+              key={`${h.assetId}${h.direction}`}
+              className="flex min-w-0 flex-col rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] p-4"
             >
-              <div className="text-base font-medium">{compactIdr(h.idrValue)}</div>
+              <div className="font-medium">
+                <FitText max={16} min={11}>
+                  {compactIdr(h.idrValue)}
+                </FitText>
+              </div>
               <div className={`text-[11px] ${h.unrealizedPct >= 0 ? "up" : "down"}`}>{pct(h.unrealizedPct)}</div>
               <div className="mt-4">
                 <AssetIcon symbol={h.symbol} color={CLASS_COLOR[h.assetClass]} icon={h.icon} size={32} />

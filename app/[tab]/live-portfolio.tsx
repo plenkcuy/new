@@ -268,7 +268,7 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
             dan portofolio terisi otomatis.
           </p>
         ) : (
-          <table className="data-table">
+          <table className="data-table stack-lg">
             <thead>
               <tr>
                 <th>Aset</th>
@@ -284,7 +284,7 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
             <tbody>
               {rows.map((r) => (
                 <tr key={`${r.assetId}${r.direction}`}>
-                  <td>
+                  <td data-full>
                     <div className="flex items-center gap-3">
                       <AssetIcon symbol={r.symbol} color={CLASS_COLOR[r.assetClass]} icon={r.icon} size={32} />
                       <div>
@@ -296,9 +296,9 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
                       </div>
                     </div>
                   </td>
-                  <td className="num">{r.assetClass === "idx" ? `${num(r.qty / IDX_LOT)} lot` : quantity(r.qty)}</td>
-                  <td className="num">{unitPrice(r.avgPrice, r.ccy)}</td>
-                  <td className="num" title={r.source ? `Sumber: ${r.source}` : undefined}>
+                  <td className="num" data-label="Jumlah">{r.assetClass === "idx" ? `${num(r.qty / IDX_LOT)} lot` : quantity(r.qty)}</td>
+                  <td className="num" data-label="Harga rata rata">{unitPrice(r.avgPrice, r.ccy)}</td>
+                  <td className="num" data-label="Harga" title={r.source ? `Sumber: ${r.source}` : undefined}>
                     {unitPrice(r.price, r.ccy)}
                     {r.changePct !== null && <div className={`text-[11px] ${r.changePct >= 0 ? "up" : "down"}`}>{pct(r.changePct)}</div>}
                     {r.fromTrade && (
@@ -309,13 +309,13 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
                       </div>
                     )}
                   </td>
-                  <td className="num">{money(r.value, report)}</td>
-                  <td className={`num ${r.unrealized >= 0 ? "up" : "down"}`}>
+                  <td className="num" data-label="Nilai">{money(r.value, report)}</td>
+                  <td className={`num ${r.unrealized >= 0 ? "up" : "down"}`} data-label="Untung rugi">
                     {money(r.unrealized, report)}
                     <div className="text-[11px]">{pct(r.unrealizedPct)}</div>
                   </td>
-                  <td className="num">{r.direction === "short" ? "" : `${decimal(r.share, 1)}%`}</td>
-                  <td>
+                  <td className="num" data-label="Alokasi">{r.direction === "short" ? "" : `${decimal(r.share, 1)}%`}</td>
+                  <td data-actions>
                     <Link href={`/journal?close=${r.assetId}${r.direction === "short" ? "&dir=short" : ""}#form`} className="pill" aria-label={`Tutup posisi ${r.direction === "short" ? "short " : ""}${r.symbol}`}>
                       Tutup
                     </Link>

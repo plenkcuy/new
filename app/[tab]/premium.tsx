@@ -89,7 +89,7 @@ export async function AnalysisScreen({ user }: ScreenProps) {
 
         <section className="card overflow-x-auto">
           <h2 className="p-6 pb-2 text-lg">Kontributor untung rugi</h2>
-          <table className="data-table">
+          <table className="data-table stack">
             <thead>
               <tr>
                 <th>Aset</th>
@@ -100,12 +100,12 @@ export async function AnalysisScreen({ user }: ScreenProps) {
             <tbody>
               {a.contributors.map((c) => (
                 <tr key={c.symbol}>
-                  <td>
+                  <td data-full>
                     <div>{c.symbol}</div>
                     <div className="text-[11px] text-[var(--muted)]">{c.name}</div>
                   </td>
-                  <td className={`num ${c.pnl >= 0 ? "up" : "down"}`}>{idr(c.pnl)}</td>
-                  <td className={`num ${c.pnlPct >= 0 ? "up" : "down"}`}>{pct(c.pnlPct)}</td>
+                  <td className={`num ${c.pnl >= 0 ? "up" : "down"}`} data-label="Untung rugi">{idr(c.pnl)}</td>
+                  <td className={`num ${c.pnlPct >= 0 ? "up" : "down"}`} data-label="% dari modal">{pct(c.pnlPct)}</td>
                 </tr>
               ))}
             </tbody>

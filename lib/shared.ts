@@ -392,3 +392,13 @@ export function axisMoney(v: number, ccy: Ccy): string {
   }
   return `$${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v)}`;
 }
+
+/**
+ * Seperti money(), tetapi angka yang sangat besar diringkas (rupiah mulai 10 miliar, dolar mulai 100 juta)
+ * supaya tetap terbaca di kartu sempit.
+ */
+export function moneyFit(n: number, ccy: Ccy): string {
+  const abs = Math.abs(n);
+  if (ccy === "IDR") return abs >= 1e10 ? compactIdr(n) : money(n, ccy);
+  return abs >= 1e8 ? (n < 0 ? "-" : "") + compactUsd(abs) : money(n, ccy);
+}

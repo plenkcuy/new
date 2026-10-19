@@ -229,7 +229,7 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
       {positions.length === 0 ? (
         <p className="p-6 pt-2 text-sm text-[var(--muted)]">Belum ada posisi terbuka.</p>
       ) : (
-        <table className="data-table">
+        <table className="data-table stack-lg">
           <thead>
             <tr>
               <th>Aset</th>
@@ -245,7 +245,7 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
           <tbody>
             {positions.map((p) => (
               <tr key={p.assetId}>
-                <td>
+                <td data-full>
                   <div className="flex items-center gap-3">
                     <AssetIcon symbol={p.symbol} color={CLASS_COLOR[p.assetClass]} icon={p.icon} size={32} />
                     <div>
@@ -257,9 +257,9 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
                     </div>
                   </div>
                 </td>
-                <td className="num">{p.assetClass === "idx" ? `${num(p.qty / IDX_LOT)} lot` : quantity(p.qty)}</td>
-                <td className="num">{unitPrice(p.avgPrice, p.ccy)}</td>
-                <td className="num">
+                <td className="num" data-label="Jumlah">{p.assetClass === "idx" ? `${num(p.qty / IDX_LOT)} lot` : quantity(p.qty)}</td>
+                <td className="num" data-label="Harga rata rata">{unitPrice(p.avgPrice, p.ccy)}</td>
+                <td className="num" data-label="Harga">
                   {unitPrice(p.price, p.ccy)}
                   {p.priceFromTrade && (
                     <div className="mt-1">
@@ -269,15 +269,15 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
                     </div>
                   )}
                 </td>
-                <td className="num" title={p.direction === "short" ? "Posisi short: nilai = untung rugi belum terealisasi (tanpa margin)" : undefined}>
+                <td className="num" data-label="Nilai" title={p.direction === "short" ? "Posisi short: nilai = untung rugi belum terealisasi (tanpa margin)" : undefined}>
                   {money(p.value, report)}
                 </td>
-                <td className={`num ${tone(p.unrealized)}`}>
+                <td className={`num ${tone(p.unrealized)}`} data-label="Untung rugi">
                   {money(p.unrealized, report)}
                   <div className="text-[11px]">{pct(p.unrealizedPct)}</div>
                 </td>
-                <td className="num">{p.direction === "short" ? "" : `${decimal(p.share, 1)}%`}</td>
-                <td>
+                <td className="num" data-label="Alokasi">{p.direction === "short" ? "" : `${decimal(p.share, 1)}%`}</td>
+                <td data-actions>
                   <Link href={`/journal?close=${p.assetId}${p.direction === "short" ? "&dir=short" : ""}#form`} className="pill" aria-label={`Tutup posisi ${p.direction === "short" ? "short " : ""}${p.symbol}`}>
                     Tutup
                   </Link>
@@ -307,7 +307,7 @@ function HistoryTable({
         <p className="p-6 pt-2 text-sm text-[var(--muted)]">Belum ada transaksi. Catat transaksi pertamamu di atas.</p>
       ) : (
         <>
-          <table className="data-table">
+          <table className="data-table stack-xl">
             <thead>
               <tr>
                 <th>Waktu (WIB)</th>
@@ -324,8 +324,8 @@ function HistoryTable({
             <tbody>
               {history.rows.map((r) => (
                 <tr key={r.id}>
-                  <td className="text-[var(--muted)]">{formatDateTime(r.t)}</td>
-                  <td>
+                  <td className="text-[var(--muted)]" data-label="Waktu (WIB)" data-full>{formatDateTime(r.t)}</td>
+                  <td data-full>
                     <div className="flex items-center gap-3">
                       <AssetIcon symbol={r.symbol} color={CLASS_COLOR[r.assetClass]} icon={r.icon} size={28} />
                       <div>
@@ -334,7 +334,7 @@ function HistoryTable({
                       </div>
                     </div>
                   </td>
-                  <td className={r.side === "buy" ? "up" : "down"}>
+                  <td className={r.side === "buy" ? "up" : "down"} data-label="Sisi">
                     {r.direction === "short" ? (r.side === "sell" ? "Short" : "Cover") : r.side === "buy" ? "Beli" : "Jual"}
                     {r.linkId && (
                       <div className="mt-1">
@@ -344,10 +344,10 @@ function HistoryTable({
                       </div>
                     )}
                   </td>
-                  <td className="num">{r.assetClass === "idx" ? `${num(r.qty / IDX_LOT)} lot` : quantity(r.qty)}</td>
-                  <td className="num">{unitPrice(r.price, r.ccy)}</td>
-                  <td className="num text-[var(--muted)]">{unitPrice(r.fee, r.ccy)}</td>
-                  <td className={`num ${r.result ? tone(r.result.pnl) : ""}`}>
+                  <td className="num" data-label="Jumlah">{r.assetClass === "idx" ? `${num(r.qty / IDX_LOT)} lot` : quantity(r.qty)}</td>
+                  <td className="num" data-label="Harga">{unitPrice(r.price, r.ccy)}</td>
+                  <td className="num text-[var(--muted)]" data-label="Fee">{unitPrice(r.fee, r.ccy)}</td>
+                  <td className={`num ${r.result ? tone(r.result.pnl) : ""}`} data-label="Hasil">
                     {r.result ? (
                       <>
                         <div>{money(r.result.pnl, report)}</div>
@@ -365,7 +365,7 @@ function HistoryTable({
                       ""
                     )}
                   </td>
-                  <td className="max-w-[280px] whitespace-normal">
+                  <td className="whitespace-normal sm:max-w-[220px]" data-label="Catatan" data-full data-empty={r.setup || r.emotion || r.tags.length > 0 || r.notes ? undefined : ""}>
                     <div className="flex flex-wrap gap-1.5">
                       {r.setup && <span className="badge badge-premium">{r.setup}</span>}
                       {r.emotion && <span className="badge badge-free">{r.emotion}</span>}
@@ -377,7 +377,7 @@ function HistoryTable({
                     </div>
                     {r.notes && <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--muted)]">{r.notes}</p>}
                   </td>
-                  <td>
+                  <td data-actions>
                     <form action={deleteTrade}>
                       <input type="hidden" name="id" value={r.id} />
                       <button

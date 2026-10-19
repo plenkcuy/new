@@ -195,6 +195,213 @@ body {
     font-variant-numeric: tabular-nums;
   }
 
+  /*
+   * Tabel bertumpuk: baris berubah menjadi kartu kecil berisi pasangan label dan nilai (label dari atribut
+   * data-label), jadi tidak perlu digeser ke samping. Pilih kelas sesuai lebar tabelnya:
+   *   stack    : di bawah 640px (HP)
+   *   stack-lg : di bawah 1280px (HP dan tablet), untuk tabel sekitar 9 kolom
+   *   stack-xl : di bawah 1536px, untuk tabel paling lebar (riwayat transaksi)
+   *   data-full    : sel memenuhi satu baris penuh (biasanya sel aset)
+   *   data-actions : sel tombol aksi, rata kanan
+   * Di atas batasnya tabel tampil normal. Padding sel dirapatkan di bawah 1536px agar muat di kartu.
+   */
+  @media (max-width: 1535px) {
+    .data-table th,
+    .data-table td {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+  }
+  @media (max-width: 639px) {
+    .data-table.stack,
+    .data-table.stack-lg,
+    .data-table.stack-xl,
+    .data-table.stack tbody,
+    .data-table.stack-lg tbody,
+    .data-table.stack-xl tbody {
+      display: block;
+      width: 100%;
+    }
+    .data-table.stack thead,
+    .data-table.stack-lg thead,
+    .data-table.stack-xl thead {
+      display: none;
+    }
+    .data-table.stack tr,
+    .data-table.stack-lg tr,
+    .data-table.stack-xl tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 16px;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .data-table.stack tr:last-child,
+    .data-table.stack-lg tr:last-child,
+    .data-table.stack-xl tr:last-child {
+      border-bottom: 0;
+    }
+    .data-table.stack td,
+    .data-table.stack-lg td,
+    .data-table.stack-xl td {
+      display: block;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      text-align: left;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .data-table.stack td[data-label]::before,
+    .data-table.stack-lg td[data-label]::before,
+    .data-table.stack-xl td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 2px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .data-table.stack td[data-full],
+    .data-table.stack-lg td[data-full],
+    .data-table.stack-xl td[data-full] {
+      grid-column: 1 / -1;
+    }
+    .data-table.stack td[data-actions],
+    .data-table.stack-lg td[data-actions],
+    .data-table.stack-xl td[data-actions] {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .data-table.stack td:empty,
+    .data-table.stack-lg td:empty,
+    .data-table.stack-xl td:empty,
+    .data-table.stack td[data-empty],
+    .data-table.stack-lg td[data-empty],
+    .data-table.stack-xl td[data-empty] {
+      display: none;
+    }
+    .data-table.stack .num,
+    .data-table.stack-lg .num,
+    .data-table.stack-xl .num {
+      text-align: left;
+    }
+  }
+  @media (min-width: 640px) and (max-width: 1279px) {
+    .data-table.stack-lg,
+    .data-table.stack-xl,
+    .data-table.stack-lg tbody,
+    .data-table.stack-xl tbody {
+      display: block;
+      width: 100%;
+    }
+    .data-table.stack-lg thead,
+    .data-table.stack-xl thead {
+      display: none;
+    }
+    .data-table.stack-lg tr,
+    .data-table.stack-xl tr {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px 16px;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .data-table.stack-lg tr:last-child,
+    .data-table.stack-xl tr:last-child {
+      border-bottom: 0;
+    }
+    .data-table.stack-lg td,
+    .data-table.stack-xl td {
+      display: block;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      text-align: left;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .data-table.stack-lg td[data-label]::before,
+    .data-table.stack-xl td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 2px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .data-table.stack-lg td[data-full],
+    .data-table.stack-xl td[data-full] {
+      grid-column: 1 / -1;
+    }
+    .data-table.stack-lg td[data-actions],
+    .data-table.stack-xl td[data-actions] {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .data-table.stack-lg td:empty,
+    .data-table.stack-xl td:empty,
+    .data-table.stack-lg td[data-empty],
+    .data-table.stack-xl td[data-empty] {
+      display: none;
+    }
+    .data-table.stack-lg .num,
+    .data-table.stack-xl .num {
+      text-align: left;
+    }
+  }
+  @media (min-width: 1280px) and (max-width: 1535px) {
+    .data-table.stack-xl,
+    .data-table.stack-xl tbody {
+      display: block;
+      width: 100%;
+    }
+    .data-table.stack-xl thead {
+      display: none;
+    }
+    .data-table.stack-xl tr {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px 16px;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .data-table.stack-xl tr:last-child {
+      border-bottom: 0;
+    }
+    .data-table.stack-xl td {
+      display: block;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      text-align: left;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .data-table.stack-xl td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 2px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .data-table.stack-xl td[data-full] {
+      grid-column: 1 / -1;
+    }
+    .data-table.stack-xl td[data-actions] {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .data-table.stack-xl td:empty,
+    .data-table.stack-xl td[data-empty] {
+      display: none;
+    }
+    .data-table.stack-xl .num {
+      text-align: left;
+    }
+  }
+
   /* ---------- Warna naik/turun ---------- */
   .up {
     color: var(--up);

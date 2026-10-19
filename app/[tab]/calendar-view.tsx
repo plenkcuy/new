@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
+import { FitText } from "@/components/fit-text";
 import {
   CLASS_LABEL,
   IDX_LOT,
   compactMoney,
   decimal,
   money,
+  moneyFit,
   num,
   pct,
   quantity,
@@ -91,20 +93,19 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
   return (
     <div className="flex flex-col gap-5">
       {/* Ringkasan bulan */}
-      <div className="flex snap-x gap-4 overflow-x-auto pb-1">
-        <div className="card relative min-w-[160px] flex-1 snap-start overflow-hidden p-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="card relative col-span-2 min-w-0 overflow-hidden p-4 sm:col-span-1 sm:p-5">
           <div className="absolute right-0 top-0 h-16 w-16 rounded-bl-[100%] bg-teal-500/10" aria-hidden />
           <span className="text-xs text-[var(--muted)]">Net PnL</span>
-          <div
-            className={`mt-1 text-2xl font-extrabold ${summary.net > 0 ? "up" : summary.net < 0 ? "down" : ""}`}
-            data-testid="net-pnl"
-          >
-            {minus(money(summary.net, report))}
+          <div className={`mt-1 font-extrabold ${summary.net > 0 ? "up" : summary.net < 0 ? "down" : ""}`} data-testid="net-pnl">
+            <FitText max={26} min={11}>
+              {minus(moneyFit(summary.net, report))}
+            </FitText>
           </div>
           <div className="mt-1 text-[11px] text-[var(--muted)]">{num(summary.trades)} transaksi tertutup</div>
         </div>
 
-        <div className="card flex min-w-[130px] snap-start flex-col items-center justify-center p-5">
+        <div className="card flex min-w-0 flex-col items-center justify-center p-4 sm:p-5">
           <span className="mb-2 text-xs text-[var(--muted)]">Win rate hari</span>
           <div className="relative flex h-14 w-14 items-center justify-center">
             <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 36 36" aria-hidden>
@@ -134,17 +135,25 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
           </div>
         </div>
 
-        <div className="card min-w-[150px] snap-start p-5">
+        <div className="card min-w-0 p-4 sm:p-5">
           <span className="text-xs text-[var(--muted)]">Hari terbaik</span>
-          <div className="up mt-1 text-xl font-extrabold">{summary.best && summary.best.pnl > 0 ? minus(money(summary.best.pnl, report)) : "Belum ada"}</div>
+          <div className="up mt-1 font-extrabold">
+            <FitText max={20} min={10}>
+              {summary.best && summary.best.pnl > 0 ? minus(moneyFit(summary.best.pnl, report)) : "Belum ada"}
+            </FitText>
+          </div>
           <div className="mt-1 text-[11px] text-[var(--muted)]">
             {summary.best && summary.best.pnl > 0 ? `Tanggal ${dayLabel(summary.best.key)}` : "\u00A0"}
           </div>
         </div>
 
-        <div className="card min-w-[150px] snap-start p-5">
+        <div className="card col-span-2 min-w-0 p-4 sm:col-span-1 sm:p-5">
           <span className="text-xs text-[var(--muted)]">Hari terburuk</span>
-          <div className="down mt-1 text-xl font-extrabold">{summary.worst && summary.worst.pnl < 0 ? minus(money(summary.worst.pnl, report)) : "Belum ada"}</div>
+          <div className="down mt-1 font-extrabold">
+            <FitText max={20} min={10}>
+              {summary.worst && summary.worst.pnl < 0 ? minus(moneyFit(summary.worst.pnl, report)) : "Belum ada"}
+            </FitText>
+          </div>
           <div className="mt-1 text-[11px] text-[var(--muted)]">
             {summary.worst && summary.worst.pnl < 0 ? `Tanggal ${dayLabel(summary.worst.key)}` : "\u00A0"}
           </div>
@@ -152,12 +161,12 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
       </div>
 
       {/* Kalender */}
-      <section className="card p-4 sm:p-6">
-        <div className="mb-5 flex items-center justify-between px-1">
+      <section className="card p-3 sm:p-6">
+        <div className="mb-4 flex items-center justify-between sm:mb-5 sm:px-1">
           <button type="button" className="icon-btn" aria-label="Bulan sebelumnya" disabled={!canPrev} onClick={() => goTo(shift(month, -1))}>
             <ChevronLeft size={16} />
           </button>
-          <h2 className="text-lg font-bold tracking-wide" data-testid="month-title">
+          <h2 className="text-base font-bold tracking-wide sm:text-lg" data-testid="month-title">
             {MONTHS[monthNumber - 1]} {year}
           </h2>
           <button type="button" className="icon-btn" aria-label="Bulan berikutnya" disabled={!canNext} onClick={() => goTo(shift(month, 1))}>
@@ -165,13 +174,13 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
           </button>
         </div>
 
-        <div className="mb-3 grid grid-cols-7 gap-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] sm:gap-2">
+        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase tracking-wider text-[var(--muted)] sm:mb-3 sm:gap-2 sm:text-[10px]">
           {WEEKDAYS.map((d) => (
             <div key={d}>{d}</div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2" role="grid" aria-label={`Kalender PnL ${MONTHS[monthNumber - 1]} ${year}`}>
+        <div className="grid grid-cols-7 gap-1 sm:gap-2" role="grid" aria-label={`Kalender PnL ${MONTHS[monthNumber - 1]} ${year}`}>
           {Array.from({ length: firstWeekday }, (_, i) => (
             <div
               key={`p${i}`}
@@ -220,7 +229,11 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
                 )}
                 <span className={`absolute left-1.5 top-1 text-[9px] font-bold ${dateColor}`}>{d}</span>
                 {pnl !== 0 ? (
-                  <span className={`mt-2 text-[10px] font-extrabold tracking-tight sm:text-xs ${text}`}>{compactMoney(pnl, report)}</span>
+                  <span className={`mt-2 block w-full px-0.5 font-extrabold tracking-tight ${text}`}>
+                    <FitText max={12} min={6} className="text-center">
+                      {compactMoney(pnl, report)}
+                    </FitText>
+                  </span>
                 ) : (
                   day && day.buys > 0 && <span className="mt-2 h-1.5 w-1.5 rounded-full bg-teal-400/60" aria-hidden />
                 )}
@@ -269,13 +282,13 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
                   <ul className="mt-4 flex flex-col divide-y divide-white/5">
                     {detail.trades.map((t, i) => (
                       <li key={`${t.symbol}${i}`} className="flex items-center justify-between gap-3 py-3 text-sm">
-                        <div>
-                          <div className="font-semibold">{t.symbol}</div>
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold">{t.symbol}</div>
                           <div className="text-[11px] text-[var(--muted)]">
                             {CLASS_LABEL[t.assetClass]} · {t.direction === "short" ? "cover" : "jual"} {t.assetClass === "idx" ? `${num(t.qty / IDX_LOT)} lot` : quantity(t.qty)}
                           </div>
                         </div>
-                        <div className={`text-right ${t.pnl >= 0 ? "up" : "down"}`}>
+                        <div className={`shrink-0 text-right ${t.pnl >= 0 ? "up" : "down"}`}>
                           <div className="font-bold">{minus(money(t.pnl, report))}</div>
                           <div className="text-[11px]">
                             {minus(pct(t.pnlPct))}

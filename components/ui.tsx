@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Lock } from "lucide-react";
 import { TIER_LABEL, deniedRedirect } from "@/lib/access";
 import type { Tier } from "@/lib/shared";
+import { FitText } from "./fit-text";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
@@ -68,7 +69,15 @@ export function StatCard({
   return (
     <div className="card p-5">
       <div className="text-xs text-[var(--muted)]">{label}</div>
-      <div className={`mt-2 text-2xl font-medium tracking-tight ${tone ?? ""}`}>{value}</div>
+      <div className={`mt-2 font-medium tracking-tight ${tone ?? ""}`}>
+        {typeof value === "string" ? (
+          <FitText max={24} min={11}>
+            {value}
+          </FitText>
+        ) : (
+          <span className="text-2xl">{value}</span>
+        )}
+      </div>
       {hint && <div className="mt-1 text-xs text-[var(--muted)]">{hint}</div>}
     </div>
   );
