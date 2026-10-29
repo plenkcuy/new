@@ -44,10 +44,10 @@ export function Watchlist({ markets }: { markets: WatchMarket[] }) {
     <section className="card flex flex-col p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg">Watchlist</h2>
-        {current.updatedAt && <span className="text-[11px] text-[var(--muted)]">Diperbarui {clock(current.updatedAt)} WIB</span>}
+        {current.updatedAt && <span className="text-xs text-[var(--muted)]">Diperbarui {clock(current.updatedAt)} WIB</span>}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-5 flex flex-wrap gap-3">
         {markets.map((m) => (
           <button key={m.market} type="button" className="pill" data-active={market === m.market} onClick={() => setMarket(m.market)}>
             {MARKET_LABEL[m.market]}
@@ -55,7 +55,7 @@ export function Watchlist({ markets }: { markets: WatchMarket[] }) {
         ))}
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-3">
         {current.lists.map((l) => (
           <button
             key={l.key}
@@ -69,7 +69,7 @@ export function Watchlist({ markets }: { markets: WatchMarket[] }) {
         ))}
       </div>
 
-      <ul className="mt-3 flex-1 divide-y divide-[var(--line)]">
+      <ul className="mt-4 flex-1 divide-y divide-[var(--line)]">
         {(list?.items.length ?? 0) === 0 && (
           <li className="py-6 text-sm text-[var(--muted)]">
             {current.failed
@@ -80,15 +80,15 @@ export function Watchlist({ markets }: { markets: WatchMarket[] }) {
           </li>
         )}
         {list?.items.map((i) => (
-          <li key={`${i.market}${i.symbol}`} className="flex items-center gap-3 py-3.5">
+          <li key={`${i.market}${i.symbol}`} className="flex items-center gap-4 py-4">
             <AssetIcon symbol={i.symbol} color={MARKET_COLOR[i.market]} icon={i.icon} size={36} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm">{i.symbol}</div>
-              <div className="truncate text-[11px] text-[var(--muted)]">{i.name}</div>
+              <div className="truncate text-base font-medium">{i.symbol}</div>
+              <div className="truncate text-sm text-[var(--muted)]">{i.name}</div>
             </div>
             <div className="text-right">
-              <div className="text-sm">{unitPrice(i.price, i.ccy)}</div>
-              <div className={`text-[11px] ${i.change >= 0 ? "up" : "down"}`}>{pct(i.change)}</div>
+              <div className="text-base font-medium">{unitPrice(i.price, i.ccy)}</div>
+              <div className={`text-sm font-medium ${i.change >= 0 ? "up" : "down"}`}>{pct(i.change)}</div>
             </div>
           </li>
         ))}
@@ -97,7 +97,7 @@ export function Watchlist({ markets }: { markets: WatchMarket[] }) {
       {list && list.locked > 0 && (
         <Link
           href={deniedRedirect("premium", "/dashboard")}
-          className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 py-3 text-xs text-[var(--accent)] transition hover:border-white/30"
+          className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 py-3.5 text-sm text-[var(--accent)] transition hover:border-white/30"
         >
           <Lock size={13} /> +{list.locked} aset lainnya khusus Premium
         </Link>
@@ -132,10 +132,10 @@ function ChartTooltip({ active, payload, firstPnl }: TipProps) {
   const gained = (p.pnl ?? 0) - firstPnl;
   return (
     <div className="rounded-2xl border border-white/10 bg-[#0d1717] px-4 py-3 shadow-xl">
-      <div className="text-[11px] text-[var(--muted)]">{fmt(p.t, fullFmt)}</div>
+      <div className="text-xs text-[var(--muted)]">{fmt(p.t, fullFmt)}</div>
       <div className="mt-1 text-sm font-medium">{idr(p.value)}</div>
       {p.pnl !== undefined && (
-        <div className={`mt-1 text-[11px] ${gained >= 0 ? "up" : "down"}`}>Untung rugi periode {idr(gained)}</div>
+        <div className={`mt-1 text-xs ${gained >= 0 ? "up" : "down"}`}>Untung rugi periode {idr(gained)}</div>
       )}
     </div>
   );
@@ -161,17 +161,17 @@ export function PerformanceChart({ data, range, allowedRanges }: Props) {
     <section className="card p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg">Performa Portofolio</h2>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
           {RANGES.map((r) =>
             allowedRanges.includes(r) ? (
-              <button key={r} type="button" className="pill px-5!" data-active={range === r} onClick={() => select(r)}>
+              <button key={r} type="button" className="pill px-6!" data-active={range === r} onClick={() => select(r)}>
                 {r}
               </button>
             ) : (
               <Link
                 key={r}
                 href={deniedRedirect("premium", `${pathname}?range=${r}`)}
-                className="pill px-5! text-[var(--muted)]"
+                className="pill px-6! text-[var(--muted)]"
                 title="Khusus Premium"
               >
                 <Lock size={12} /> {r}
@@ -197,7 +197,7 @@ export function PerformanceChart({ data, range, allowedRanges }: Props) {
               <XAxis
                 dataKey="t"
                 tickFormatter={(t: number) => fmt(t, tickFmt[range])}
-                tick={{ fill: "#86a09c", fontSize: 11 }}
+                tick={{ fill: "#a0aec0", fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
                 minTickGap={32}
@@ -205,10 +205,10 @@ export function PerformanceChart({ data, range, allowedRanges }: Props) {
               <YAxis
                 domain={["auto", "auto"]}
                 tickFormatter={(v: number) => axisMoney(v, "IDR")}
-                tick={{ fill: "#86a09c", fontSize: 11 }}
+                tick={{ fill: "#a0aec0", fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
-                width={56}
+                width={60}
               />
               <Tooltip content={<ChartTooltip firstPnl={firstPnl} />} cursor={{ stroke: "rgba(255,255,255,0.45)", strokeDasharray: "4 4" }} />
               <Area
