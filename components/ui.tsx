@@ -48,7 +48,7 @@ export function PageHeader({
     <div className="flex flex-wrap items-end justify-between gap-4 lg:pr-80">
       <div>
         <h1 className="text-3xl font-normal tracking-tight sm:text-4xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-[var(--muted)]">{subtitle}</p>}
+        {subtitle && <p className="mt-1.5 text-base text-[var(--muted)]">{subtitle}</p>}
       </div>
       {children}
     </div>
@@ -67,8 +67,8 @@ export function StatCard({
   tone?: "up" | "down";
 }) {
   return (
-    <div className="card p-5">
-      <div className="text-xs text-[var(--muted)]">{label}</div>
+    <div className="card p-6">
+      <div className="text-sm text-[var(--muted)]">{label}</div>
       <div className={`mt-2 font-medium tracking-tight ${tone ?? ""}`}>
         {typeof value === "string" ? (
           <FitText max={24} min={11}>
@@ -78,7 +78,7 @@ export function StatCard({
           <span className="text-2xl">{value}</span>
         )}
       </div>
-      {hint && <div className="mt-1 text-xs text-[var(--muted)]">{hint}</div>}
+      {hint && <div className="mt-1.5 text-sm text-[var(--muted)]">{hint}</div>}
     </div>
   );
 }
@@ -131,7 +131,7 @@ export function UpgradeCard({
       </div>
       <div>
         <h2 className="text-lg">{title}</h2>
-        <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-[var(--muted)]">{description}</p>
+        <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-[var(--muted)]">{description}</p>
       </div>
       <Link href={deniedRedirect(required, from)} className="btn btn-primary">
         Upgrade ke Premium
