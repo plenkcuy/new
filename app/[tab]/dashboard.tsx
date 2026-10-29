@@ -59,8 +59,8 @@ export async function DashboardScreen({ user, query }: ScreenProps) {
     <>
       {header}
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-[1fr_1.05fr_1fr]">
-        <div className="flex min-w-0 flex-col gap-5">
+      <div className="grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-[1fr_1.05fr_1fr]">
+        <div className="flex min-w-0 flex-col gap-6">
           <TotalHolding value={portfolio.totals.value} unrealizedPct={portfolio.totals.unrealizedPct} hasTrades={portfolio.totalTrades > 0} />
           {can(user.tier, "ai-insights") ? (
             <AiInsights />
@@ -70,14 +70,14 @@ export async function DashboardScreen({ user, query }: ScreenProps) {
               title="Insight AI"
               description="Rekomendasi dan ringkasan berbasis AI untuk portofoliomu tersedia di paket Premium."
               from="/dashboard"
-              className="min-h-[230px]"
+              className="min-h-[230px] flex-1"
             />
           )}
         </div>
 
         <Watchlist markets={watchlist} />
 
-        <div className="min-w-0 md:col-span-2 xl:col-span-1">
+        <div className="flex min-w-0 flex-col md:col-span-2 xl:col-span-1">
           <PortfolioCard positions={portfolio.positions} usdIdr={portfolio.usdIdr} />
         </div>
       </div>
@@ -91,7 +91,7 @@ export async function DashboardScreen({ user, query }: ScreenProps) {
 
 function TotalHolding({ value, unrealizedPct, hasTrades }: { value: number; unrealizedPct: number; hasTrades: boolean }) {
   return (
-    <section className="card-glow flex flex-col justify-between p-6" style={{ minHeight: 160 }}>
+    <section className="card-glow flex flex-col justify-between p-6" style={{ minHeight: 168 }}>
       <div className="flex items-center justify-between">
         <h2 className="text-lg">Nilai Portofolio</h2>
         <Link href="/portfolio" className="pill">
@@ -106,11 +106,11 @@ function TotalHolding({ value, unrealizedPct, hasTrades }: { value: number; unre
           </FitText>
         </div>
         {hasTrades ? (
-          <div className={`mt-1 text-sm ${unrealizedPct >= 0 ? "up" : "down"}`}>
-            {pct(unrealizedPct)} <span className="text-[var(--muted)]">untung rugi dari modal</span>
+          <div className={`mt-2 text-lg font-medium ${unrealizedPct >= 0 ? "up" : "down"}`}>
+            {pct(unrealizedPct)} {unrealizedPct >= 0 ? "Total Keuntungan" : "Total Kerugian"}
           </div>
         ) : (
-          <div className="mt-1 text-sm text-[var(--muted)]">
+          <div className="mt-2 text-base text-[var(--muted)]">
             Belum ada transaksi.{" "}
             <Link href="/journal" className="text-[var(--accent)] hover:underline">
               Catat di Jurnal
@@ -131,7 +131,7 @@ function AiInsights() {
     >
       <div>
         <h2 className="text-xl">Keputusan Berbasis Data</h2>
-        <p className="mx-auto mt-3 max-w-[300px] text-xs leading-relaxed text-[var(--muted)]">
+        <p className="mx-auto mt-3 max-w-[300px] text-sm leading-relaxed text-[var(--muted)]">
           Tinggalkan tebak-tebakan. Dapatkan insight berbasis AI yang disesuaikan dengan strategi investasimu.
         </p>
       </div>
@@ -161,7 +161,7 @@ function PortfolioCard({ positions, usdIdr }: { positions: LivePosition[]; usdId
     .slice(0, 4);
 
   return (
-    <section className="card p-6">
+    <section className="card flex-1 p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg">Portofolioku</h2>
         <div className="flex shrink-0 items-center gap-2">
@@ -175,7 +175,7 @@ function PortfolioCard({ positions, usdIdr }: { positions: LivePosition[]; usdId
       </div>
 
       {top.length === 0 ? (
-        <p className="mt-4 text-sm text-[var(--muted)]">
+        <p className="mt-5 text-base text-[var(--muted)]">
           Belum ada posisi. Catat transaksi beli di{" "}
           <Link href="/journal" className="text-[var(--accent)] hover:underline">
             Jurnal
@@ -183,22 +183,22 @@ function PortfolioCard({ positions, usdIdr }: { positions: LivePosition[]; usdId
           dan posisimu muncul di sini.
         </p>
       ) : (
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="mt-5 grid grid-cols-2 gap-4">
           {top.map((h) => (
             <article
               key={`${h.assetId}${h.direction}`}
-              className="flex min-w-0 flex-col rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] p-4"
+              className="flex min-w-0 flex-col rounded-2xl border border-[var(--line)] bg-[var(--card-soft)] p-5"
             >
               <div className="font-medium">
                 <FitText max={16} min={11}>
                   {compactIdr(h.idrValue)}
                 </FitText>
               </div>
-              <div className={`text-[11px] ${h.unrealizedPct >= 0 ? "up" : "down"}`}>{pct(h.unrealizedPct)}</div>
+              <div className={`mt-0.5 text-sm font-medium ${h.unrealizedPct >= 0 ? "up" : "down"}`}>{pct(h.unrealizedPct)}</div>
               <div className="mt-4">
                 <AssetIcon symbol={h.symbol} color={CLASS_COLOR[h.assetClass]} icon={h.icon} size={32} />
               </div>
-              <div className="mt-3 flex items-center justify-between text-[11px] text-[var(--muted)]">
+              <div className="mt-3 flex items-center justify-between text-sm text-[var(--muted)]">
                 <span className="text-[var(--text)]">
                   {h.symbol}
                   {h.direction === "short" && " (short)"}
