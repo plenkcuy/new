@@ -82,7 +82,7 @@ function Sidebar({ tier, open, onClose }: { tier: Tier; open: boolean; onClose: 
     <aside
       aria-label="Navigasi utama"
       className={[
-        "card fixed inset-y-3 left-3 z-50 flex w-[280px] max-w-[85vw] flex-col overflow-y-auto p-4",
+        "card fixed inset-y-3 left-3 z-50 flex w-[250px] max-w-[85vw] flex-col overflow-y-auto p-4",
         "transition-[transform,visibility] duration-300 ease-out",
         open ? "visible translate-x-0" : "invisible -translate-x-[115%]",
         "lg:visible lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0",
@@ -95,7 +95,7 @@ function Sidebar({ tier, open, onClose }: { tier: Tier; open: boolean; onClose: 
         </button>
       </div>
 
-      <nav className="flex flex-col gap-2">{main.map(renderItem)}</nav>
+      <nav className="flex flex-col gap-1.5">{main.map(renderItem)}</nav>
       <nav className="mt-auto flex flex-col gap-1 pb-2 pt-6">{NAV_FOOTER.map(renderItem)}</nav>
     </aside>
   );
@@ -157,14 +157,14 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
     <div className="mx-auto min-h-screen max-w-[1600px] p-3 sm:p-5">
       {/* Jangan pakai backdrop-filter di pembungkus ini: itu membuat elemen `fixed`
           (drawer) berpatokan ke pembungkus, bukan ke layar. */}
-      <div className="grid gap-5 rounded-[32px] border border-white/5 bg-white/[0.04] p-3 sm:p-5 lg:grid-cols-[280px_1fr]">
+      <div className="grid gap-6 rounded-[32px] border border-white/5 bg-white/[0.04] p-3 sm:p-6 lg:grid-cols-[250px_1fr]">
         {open && (
           <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setOpen(false)} aria-hidden />
         )}
 
         <Sidebar tier={user.tier} open={open} onClose={() => setOpen(false)} />
 
-        <main className="relative flex min-w-0 flex-col gap-5">
+        <main className="relative flex min-w-0 flex-col gap-6">
           {/* Mobile: baris atas biasa. Desktop: menu pengguna melayang di kanan atas. */}
           <div className="flex items-center justify-between gap-3 lg:absolute lg:right-0 lg:top-0 lg:z-10">
             <div className="flex items-center gap-3 lg:hidden">
