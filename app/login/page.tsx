@@ -7,7 +7,7 @@ import { getAuthSecret, isDemoAuthEnabled } from "@/lib/session";
 
 const DEMO_NOTES: Record<(typeof DEMO_USER_IDS)[number], string> = {
   u_free: "Dashboard, portofolio, dan pasar dengan batas jatah.",
-  u_premium: "Semua fitur analisis, komunitas, dan ekspor.",
+  u_premium: "Semua fitur analisis dan ekspor.",
   u_admin: "Semua fitur Premium ditambah panel admin.",
 };
 

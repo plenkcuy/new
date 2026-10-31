@@ -66,7 +66,7 @@ export async function SettingsScreen({ user }: ScreenProps) {
 const FAQ = [
   {
     q: "Apa bedanya paket Free dan Premium?",
-    a: "Free mencakup dashboard, portofolio, dan pasar dengan batas tertentu. Premium menambah Insight AI, analisis lanjutan, komunitas, ekspor CSV, rentang grafik penuh, dan feed real-time. Bandingkan lengkapnya di halaman Upgrade.",
+    a: "Free mencakup dashboard, portofolio, dan pasar dengan batas tertentu. Premium menambah Insight AI, analisis lanjutan, ekspor CSV, rentang grafik penuh, dan feed real-time. Bandingkan lengkapnya di halaman Upgrade.",
   },
   {
     q: "Bagaimana cara upgrade ke Premium?",

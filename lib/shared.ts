@@ -80,17 +80,6 @@ export type MarketRow = {
   color: string;
 };
 
-export type Post = {
-  id: string;
-  author: string;
-  role: "Analis" | "Investor";
-  time: string;
-  body: string;
-  likes: number;
-  replies: number;
-  tags: string[];
-};
-
 /* ============================================================
  * Format
  * ============================================================ */

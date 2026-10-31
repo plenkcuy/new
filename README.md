@@ -25,13 +25,15 @@ Buka `/login`, pilih akun demo **Free**, **Premium**, atau **Admin**.
 | `/journal` | Free | Jurnal transaksi saham IDX, saham US, crypto, meme coin. Free dibatasi 30 transaksi, analitik dan ekspor CSV khusus Premium |
 | `/market` | Free | Indeks & saham. Feed tertunda (Free) / real-time (Premium) |
 | `/analysis` | **Premium** | Risiko, sektor, kontributor |
-| `/community` | **Premium** | Diskusi investor |
 | `/settings`, `/support`, `/upgrade` | Free | Akun, FAQ, perbandingan paket |
+| `/futures` | **Premium** | Futures Sentiment: funding rate, open interest, long short ratio, dan konfluensi teknikal harian (BTC, ETH, SOL) |
 | `/admin` | **Admin** | Ringkasan sistem + daftar pengguna |
+| `GET /api/futures` | Premium | Data Futures Sentiment (cache 1 menit, jalan di region Singapura) |
 | `GET /api/export` | Premium | CSV portofolio |
 | `GET /api/journal/export` | Premium | CSV jurnal transaksi |
 | `GET /api/prices` | Login | Harga terkini posisi terbuka milik pengguna (Free tiap 60 detik, Premium tiap 10 detik) |
 | `GET /api/cron/prices` | `CRON_SECRET` | Pembaruan harga dan kurs harian (dipanggil Vercel Cron) |
+| `GET /api/cron/futures` | `CRON_SECRET` | Simpan snapshot Futures Sentiment harian ke Neon (dipanggil Vercel Cron) |
 
 Admin otomatis mencakup hak Premium (`free < premium < admin`).
 
@@ -48,7 +50,7 @@ app/
     error.tsx
     dashboard.tsx  dashboard-widgets.tsx   Dashboard + watchlist/grafik (client)
     portfolio.tsx  market.tsx
-    premium.tsx             Analisis + Komunitas
+    premium.tsx             Analisis
     account.tsx             Pengaturan, Bantuan, Upgrade, Akses ditolak
     admin.tsx
 components/ui.tsx           Komponen kecil dipakai banyak layar
@@ -88,7 +90,7 @@ Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani
 | Variabel | Wajib | Keterangan |
 |---|---|---|
 | `AUTH_SECRET` | production | Minimal 32 karakter acak (`openssl rand -base64 48`). Tanpa ini sesi ditolak. |
-| `DATABASE_URL` | fitur Jurnal | Connection string Neon. Jalankan `db/001_journal.sql` sekali di Neon. |
+| `DATABASE_URL` | fitur Jurnal | Connection string Neon. Jalankan `db/001_journal.sql` sekali di Neon. Untuk snapshot Futures Sentiment, jalankan juga `db/002_futures.sql`. |
 | `CRON_SECRET` | production | Minimal 16 karakter acak untuk `/api/cron/prices`. Vercel mengirimnya otomatis. |
 | `DEMO_AUTH` | — | `true` mengaktifkan login demo. Development: aktif otomatis. **Production: mati kecuali `true`.** |
 
@@ -123,7 +125,7 @@ Catatan transaksi disimpan di Neon (`db/001_journal.sql`: aset, transaksi, harga
 - Rumus ada di `lib/journal-calc.ts`: harga rata rata bergerak, untung rugi terealisasi dan belum, TWR, drawdown, win rate, profit factor, expectancy, kelipatan R.
 - Harga: Yahoo Finance (IDX, US, crypto besar) dan DexScreener (meme coin, lewat alamat kontrak), diperbarui harian oleh cron di `vercel.json`. Bila data pasar belum ada, jurnal memakai harga transaksi terakhir dan menandainya.
 - Portofolio (`/portfolio`) dihitung dari jurnal dan dinilai dengan harga terkini: Binance (crypto), Pluang (saham IDX), Reku (saham US), DexScreener (meme coin). Premium mendapat WebSocket Binance langsung di browser, Free memakai polling 60 detik. Scraper ada di `lib/scrapers/` dan bergantung pada struktur `__NEXT_DATA__` situs sumber, jadi cek bila harga berhenti muncul.
-- Watchlist dan Pasar memakai daftar hasil scraper yang disimpan di Neon (`market_lists`): Pluang Explore (saham IDX dan US) dan CoinMarketCap (crypto), kode di `lib/scrapers/` dan `lib/market-lists.ts`. Data dibaca dari database. Bila lebih tua dari 15 menit (Free) atau 5 menit (Premium), data lama tetap tampil dan pembaruan jalan di belakang. Cron harian ikut memanaskan semua daftar. Pengambilan halaman memakai axios + cheerio (timeout 20 detik) seperti scraper aslinya. Bila diblokir atau datanya baru muncul lewat JavaScript, otomatis dicoba ulang lewat Puppeteer (Vercel: `@sparticuz/chromium` + `puppeteer-core`). Matikan dengan `SCRAPER_PUPPETEER=0`. Lokal, isi `PUPPETEER_EXECUTABLE_PATH` ke Chrome kamu. Bila watchlist kosong, panggil `GET /api/cron/prices` dengan header `Authorization: Bearer <CRON_SECRET>` dan lihat `marketLists.details`: tiap daftar menampilkan `via` (axios atau puppeteer) atau alasan gagalnya. Dashboard, Portofolio, dan Analisis dihitung dari jurnal. Hanya Komunitas dan Admin yang masih data tiruan.
+- Watchlist dan Pasar memakai daftar hasil scraper yang disimpan di Neon (`market_lists`): Pluang Explore (saham IDX dan US) dan CoinMarketCap (crypto), kode di `lib/scrapers/` dan `lib/market-lists.ts`. Data dibaca dari database. Bila lebih tua dari 15 menit (Free) atau 5 menit (Premium), data lama tetap tampil dan pembaruan jalan di belakang. Cron harian ikut memanaskan semua daftar. Pengambilan halaman memakai axios + cheerio (timeout 20 detik) seperti scraper aslinya. Bila diblokir atau datanya baru muncul lewat JavaScript, otomatis dicoba ulang lewat Puppeteer (Vercel: `@sparticuz/chromium` + `puppeteer-core`). Matikan dengan `SCRAPER_PUPPETEER=0`. Lokal, isi `PUPPETEER_EXECUTABLE_PATH` ke Chrome kamu. Bila watchlist kosong, panggil `GET /api/cron/prices` dengan header `Authorization: Bearer <CRON_SECRET>` dan lihat `marketLists.details`: tiap daftar menampilkan `via` (axios atau puppeteer) atau alasan gagalnya. Dashboard, Portofolio, dan Analisis dihitung dari jurnal. Hanya Admin yang masih data tiruan.
 - Close di Jurnal: toggle "Tandai close" (saat Beli) mencatat entry dan close sekaligus sebagai dua baris tertaut (`link_id`), dan tombol "Tutup" di tabel posisi mengisi form untuk menjual posisi itu. PnL bisa otomatis (pratinjau memakai rumus mesin hitung) atau manual (`pnl_manual`, mata uang aset, bersih dari fee dan pajak). PnL manual hanya mengganti angka untung rugi, sisa posisi tetap dihitung dari harga rata rata dan efek kurs dianggap nol. Stop loss dan take profit nonaktif dan diabaikan server pada transaksi jual dan close. Menutup posisi tidak dihitung ke batas transaksi Free, sedangkan close langsung memakai 2 slot. Menghapus salah satu sisi pasangan menghapus keduanya.
 - Short dan R: setiap transaksi punya `direction` (long dibuka dengan beli, short dibuka dengan jual dan ditutup dengan beli). Long dan short pada aset yang sama dihitung terpisah, tanpa netting. Rumus short mencerminkan long (PnL = hasil jual bersih dikurangi biaya beli kembali, efek kurs dan PnL manual ikut). Nilai posisi short adalah untung rugi belum terealisasi tanpa margin, bunga, atau funding, jadi short tidak ikut alokasi dan tidak menambah modal. Isian "Stop awal" khusus menghitung R pada transaksi yang menutup posisi (long: di bawah entry, short: di atas). Stop loss dan take profit saat membuka posisi divalidasi sisinya.
 - Tampilan HP: angka besar di kartu dan sel kalender memakai `components/fit-text.tsx` (mengecil otomatis sampai muat, angka rupiah di atas 10 miliar diringkas lewat `moneyFit`). Tabel data memakai class `stack`, `stack-lg`, atau `stack-xl` (lihat komentar di `app/globals.css`) dan atribut `data-label` pada sel, sehingga di layar kecil tiap baris menjadi kartu dan tidak perlu digeser ke samping. Tabel baru tinggal diberi class dan `data-label` yang sama.
@@ -132,6 +134,6 @@ Catatan transaksi disimpan di Neon (`db/001_journal.sql`: aset, transaksi, harga
 
 ## Catatan
 
-- Seluruh data (harga, portofolio, komunitas, admin) adalah **data tiruan** di `lib/data.ts`.
+- Seluruh data (harga, portofolio, admin) adalah **data tiruan** di `lib/data.ts`.
 - Panel admin masih hanya-baca; aksi ubah paket/bekukan akun belum ada.
 - Pembayaran belum terhubung; halaman `/upgrade` mengarahkan ke kontak.

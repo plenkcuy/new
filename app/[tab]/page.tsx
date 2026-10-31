@@ -14,11 +14,12 @@ import type { Query, ScreenProps } from "@/lib/shared";
 import { AccountScreens } from "./account";
 import { AdminScreen } from "./admin";
 import { DashboardScreen } from "./dashboard";
+import { FuturesScreen } from "./futures";
 import { CalendarScreen } from "./calendar";
 import { JournalScreen } from "./journal";
 import { MarketScreen } from "./market";
 import { PortfolioScreen } from "./portfolio";
-import { AnalysisScreen, CommunityScreen } from "./premium";
+import { AnalysisScreen } from "./premium";
 
 type Screen = { title: string; render: (props: ScreenProps) => Promise<React.ReactNode> };
 
@@ -32,7 +33,7 @@ const SCREENS: Record<string, Screen> = {
   calendar: { title: "Kalender", render: CalendarScreen },
   market: { title: "Pasar", render: MarketScreen },
   analysis: { title: "Analisis", render: AnalysisScreen },
-  community: { title: "Komunitas", render: CommunityScreen },
+  futures: { title: "Futures Sentiment", render: FuturesScreen },
   admin: { title: "Admin", render: AdminScreen },
   settings: { title: "Pengaturan", render: AccountScreens.settings },
   support: { title: "Bantuan", render: AccountScreens.support },

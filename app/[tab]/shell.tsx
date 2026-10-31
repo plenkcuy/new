@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   BarChart3,
   BookOpen,
   Briefcase,
@@ -16,7 +17,6 @@ import {
   Menu,
   Settings,
   ShieldCheck,
-  Users,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -37,8 +37,8 @@ const NAV_MAIN: NavItem[] = [
   { href: "/journal", label: "Jurnal", icon: BookOpen },
   { href: "/calendar", label: "Kalender", icon: CalendarDays },
   { href: "/analysis", label: "Analisis", icon: BarChart3 },
+  { href: "/futures", label: "Futures", icon: Activity },
   { href: "/market", label: "Pasar", icon: LineChart },
-  { href: "/community", label: "Komunitas", icon: Users },
 ];
 /** Hanya ditampilkan untuk Admin. */
 const NAV_ADMIN: NavItem = { href: "/admin", label: "Admin", icon: ShieldCheck };

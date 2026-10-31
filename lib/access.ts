@@ -41,7 +41,8 @@ export const PUBLIC_ROUTES = ["/login", "/api/cron"] as const;
 export const ROUTE_RULES: ReadonlyArray<{ prefix: string; min: Tier }> = [
   { prefix: "/admin", min: "admin" },
   { prefix: "/analysis", min: "premium" },
-  { prefix: "/community", min: "premium" },
+  { prefix: "/futures", min: "premium" },
+  { prefix: "/api/futures", min: "premium" },
   { prefix: "/api/export", min: "premium" },
   { prefix: "/api/journal/export", min: "premium" },
 ];
@@ -91,7 +92,7 @@ export const MARKET_MAX_AGE_MS = { delayed: 15 * 60 * 1000, realtime: 5 * 60 * 1
 export const FEATURE_MIN_TIER = {
   "ai-insights": "premium",
   "advanced-analytics": "premium",
-  community: "premium",
+  "futures-sentiment": "premium",
   "export-csv": "premium",
   "journal-analytics": "premium",
   "admin-panel": "admin",
@@ -157,7 +158,7 @@ export function getPlanComparison(): ComparisonRow[] {
     },
     { label: "Insight AI", free: flag("ai-insights"), premium: yes },
     { label: "Analisis lanjutan", free: flag("advanced-analytics"), premium: yes },
-    { label: "Komunitas", free: flag("community"), premium: yes },
+    { label: "Futures Sentiment", free: flag("futures-sentiment"), premium: yes },
     { label: "Ekspor portofolio (CSV)", free: flag("export-csv"), premium: yes },
   ];
 }
