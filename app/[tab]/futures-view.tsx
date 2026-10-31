@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pct, unitPrice } from "@/lib/shared";
-import type { FuturesCard, FuturesSnapshot } from "@/lib/futures/analyze";
+import { getFuturesSentiment, type FuturesCard, type FuturesSnapshot } from "@/lib/futures/analyze";
 import type { Bias, Vote } from "@/lib/futures/engine";
 
 type Tone = "up" | "down" | "flat";
@@ -78,6 +78,8 @@ function Card({ card }: { card: FuturesCard }) {
 
       <p className="text-base leading-relaxed">{card.reason}</p>
 
+      {card.error && <p className="text-sm leading-relaxed text-[var(--muted)]">Rincian teknis: {card.error}</p>}
+
       {derivatives && (
         <div>
           <div className="flex items-center justify-between">
@@ -142,17 +144,27 @@ function Card({ card }: { card: FuturesCard }) {
 export function FuturesView() {
   const [data, setData] = useState<FuturesSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
+  const saved = useRef(false);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
       try {
-        const res = await fetch("/api/futures", { cache: "no-store" });
-        if (!res.ok) throw new Error("gagal");
-        const json = (await res.json()) as FuturesSnapshot;
-        if (active) {
-          setData(json);
-          setFailed(false);
+        const json = await getFuturesSentiment({ fresh: true });
+        if (!active) return;
+        setData(json);
+        setFailed(!json.cards.some((c) => c.ok));
+        if (!saved.current && json.cards.some((c) => c.ok)) {
+          saved.current = true;
+          fetch("/api/futures/snapshot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              cards: json.cards
+                .filter((c) => c.ok)
+                .map((c) => ({ symbol: c.symbol, bias: c.bias, derivativeScore: c.derivatives?.total ?? null })),
+            }),
+          }).catch(() => {});
         }
       } catch {
         if (active) setFailed(true);
@@ -169,7 +181,7 @@ export function FuturesView() {
   if (!data) {
     return (
       <div className="card p-6 text-base text-[var(--muted)]">
-        {failed ? "Data futures belum bisa dimuat. Coba muat ulang halaman sebentar lagi." : "Memuat data futures..."}
+        Memuat data futures...
       </div>
     );
   }
@@ -183,8 +195,13 @@ export function FuturesView() {
           <Card key={card.symbol} card={card} />
         ))}
       </div>
+      {failed && (
+        <div className="card p-6 text-base leading-relaxed">
+          Perangkatmu belum bisa menjangkau Binance Futures. Cek koneksi atau VPN, lalu data akan dicoba lagi otomatis tiap menit.
+        </div>
+      )}
       <p className="text-sm leading-relaxed text-[var(--muted)]">
-        Data dari Binance Futures, diperbarui tiap menit (terakhir {time}). Sinyal ini alat bantu screening, bukan ajakan membeli atau menjual.
+        Data dari Binance Futures lewat koneksi perangkatmu, diperbarui tiap menit (terakhir {time}). Sinyal ini alat bantu screening, bukan ajakan membeli atau menjual.
       </p>
     </>
   );

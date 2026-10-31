@@ -1,4 +1,3 @@
-import "server-only";
 import {
   computeTech,
   decide,
@@ -22,6 +21,7 @@ export type FuturesCard = {
   technical: { input: TechInput; groups: Groups } | null;
   bias: Bias;
   reason: string;
+  error?: string;
 };
 
 export type FuturesSnapshot = { cards: FuturesCard[]; updatedAt: number };
@@ -30,7 +30,9 @@ const TTL_MS = 60_000;
 let cache: FuturesSnapshot | null = null;
 
 async function buildCard(symbol: string, label: string): Promise<FuturesCard> {
-  const [metrics, candles] = await Promise.all([fetchDerivatives(symbol), fetchDailyCandles(symbol)]);
+  const diag: string[] = [];
+  const [metrics, candles] = await Promise.all([fetchDerivatives(symbol, diag), fetchDailyCandles(symbol, diag)]);
+  const error = diag.length ? [...new Set(diag)].slice(0, 2).join(", ") : undefined;
 
   const derivatives =
     metrics.priceChange24h === null
@@ -56,7 +58,7 @@ async function buildCard(symbol: string, label: string): Promise<FuturesCard> {
 
   if (technical) {
     const { bias, reason } = decide(technical.groups);
-    return { symbol, label, ok: true, metrics, derivatives, technical, bias, reason };
+    return { symbol, label, ok: true, metrics, derivatives, technical, bias, reason, error };
   }
   if (derivatives) {
     return {
@@ -68,9 +70,10 @@ async function buildCard(symbol: string, label: string): Promise<FuturesCard> {
       technical: null,
       bias: derivatives.bias,
       reason: "Data teknikal harian belum tersedia, keputusan hanya dari screening derivatif.",
+      error,
     };
   }
-  return { symbol, label, ok: false, metrics, derivatives: null, technical: null, bias: "NETRAL", reason: "Data belum bisa diambil, coba lagi sebentar lagi." };
+  return { symbol, label, ok: false, metrics, derivatives: null, technical: null, bias: "NETRAL", reason: "Data belum bisa diambil, coba lagi sebentar lagi.", error };
 }
 
 export async function getFuturesSentiment(options: { fresh?: boolean } = {}): Promise<FuturesSnapshot> {

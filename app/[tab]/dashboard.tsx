@@ -64,7 +64,7 @@ export async function DashboardScreen({ user, query }: ScreenProps) {
         <div className="flex min-w-0 flex-col gap-6">
           <TotalHolding value={portfolio.totals.value} unrealizedPct={portfolio.totals.unrealizedPct} hasTrades={portfolio.totalTrades > 0} />
           {can(user.tier, "ai-insights") ? (
-            <AiInsights />
+            <AiInsights userId={user.id} />
           ) : (
             <UpgradeCard
               glow
@@ -124,8 +124,8 @@ function TotalHolding({ value, unrealizedPct, hasTrades }: { value: number; unre
 }
 
 /** Hanya dirender untuk tier yang memiliki fitur "ai-insights". */
-async function AiInsights() {
-  const biases = await latestBiases();
+async function AiInsights({ userId }: { userId: string }) {
+  const biases = await latestBiases(userId);
   const filled = biases.length > 0;
 
   return (

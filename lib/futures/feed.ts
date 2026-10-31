@@ -1,4 +1,3 @@
-import "server-only";
 import type { Candle } from "./indicators";
 
 const BASE = "https://fapi.binance.com";
@@ -9,17 +8,22 @@ export const FUTURES_SYMBOLS = [
   { symbol: "SOLUSDT", label: "SOL" },
 ] as const;
 
-async function getJson<T>(path: string): Promise<T | null> {
+async function getJson<T>(path: string, diag: string[]): Promise<T | null> {
+  const name = path.split("?")[0];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(BASE + path, {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return null;
+    const res = await fetch(BASE + path, { cache: "no-store", signal: controller.signal });
+    if (!res.ok) {
+      diag.push(`${name} dibalas ${res.status}`);
+      return null;
+    }
     return (await res.json()) as T;
-  } catch {
+  } catch (error) {
+    diag.push(`${name} gagal tersambung (${error instanceof Error ? error.name : "error"})`);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -38,13 +42,14 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-export async function fetchDerivatives(symbol: string): Promise<RawDerivatives> {
+export async function fetchDerivatives(symbol: string, diag: string[]): Promise<RawDerivatives> {
   const [premium, ticker, oiHist, ls] = await Promise.all([
-    getJson<{ lastFundingRate?: string; markPrice?: string }>(`/fapi/v1/premiumIndex?symbol=${symbol}`),
-    getJson<{ priceChangePercent?: string; lastPrice?: string }>(`/fapi/v1/ticker/24hr?symbol=${symbol}`),
-    getJson<Array<{ sumOpenInterestValue?: string }>>(`/futures/data/openInterestHist?symbol=${symbol}&period=1h&limit=25`),
+    getJson<{ lastFundingRate?: string; markPrice?: string }>(`/fapi/v1/premiumIndex?symbol=${symbol}`, diag),
+    getJson<{ priceChangePercent?: string; lastPrice?: string }>(`/fapi/v1/ticker/24hr?symbol=${symbol}`, diag),
+    getJson<Array<{ sumOpenInterestValue?: string }>>(`/futures/data/openInterestHist?symbol=${symbol}&period=1h&limit=25`, diag),
     getJson<Array<{ longShortRatio?: string; longAccount?: string; shortAccount?: string }>>(
       `/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=1h&limit=1`,
+      diag,
     ),
   ]);
 
@@ -70,9 +75,10 @@ export async function fetchDerivatives(symbol: string): Promise<RawDerivatives> 
   };
 }
 
-export async function fetchDailyCandles(symbol: string, limit = 150): Promise<Candle[] | null> {
+export async function fetchDailyCandles(symbol: string, diag: string[], limit = 150): Promise<Candle[] | null> {
   const rows = await getJson<Array<[number, string, string, string, string, string]>>(
     `/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=${limit}`,
+    diag,
   );
   if (!Array.isArray(rows) || rows.length < 40) return null;
   return rows.map((r) => ({ t: r[0], o: Number(r[1]), h: Number(r[2]), l: Number(r[3]), c: Number(r[4]), v: Number(r[5]) }));

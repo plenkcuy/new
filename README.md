@@ -28,12 +28,11 @@ Buka `/login`, pilih akun demo **Free**, **Premium**, atau **Admin**.
 | `/settings`, `/support`, `/upgrade` | Free | Akun, FAQ, perbandingan paket |
 | `/futures` | **Premium** | Futures Sentiment: funding rate, open interest, long short ratio, dan konfluensi teknikal harian (BTC, ETH, SOL) |
 | `/admin` | **Admin** | Ringkasan sistem + daftar pengguna |
-| `GET /api/futures` | Premium | Data Futures Sentiment (cache 1 menit, jalan di region Singapura) |
+| `POST /api/futures/snapshot` | Premium | Simpan bias terakhir milik pengguna (maks tiap 30 menit) untuk kartu Insight AI |
 | `GET /api/export` | Premium | CSV portofolio |
 | `GET /api/journal/export` | Premium | CSV jurnal transaksi |
 | `GET /api/prices` | Login | Harga terkini posisi terbuka milik pengguna (Free tiap 60 detik, Premium tiap 10 detik) |
 | `GET /api/cron/prices` | `CRON_SECRET` | Pembaruan harga dan kurs harian (dipanggil Vercel Cron) |
-| `GET /api/cron/futures` | `CRON_SECRET` | Simpan snapshot Futures Sentiment harian ke Neon (dipanggil Vercel Cron) |
 
 Admin otomatis mencakup hak Premium (`free < premium < admin`).
 
@@ -90,7 +89,7 @@ Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani
 | Variabel | Wajib | Keterangan |
 |---|---|---|
 | `AUTH_SECRET` | production | Minimal 32 karakter acak (`openssl rand -base64 48`). Tanpa ini sesi ditolak. |
-| `DATABASE_URL` | fitur Jurnal | Connection string Neon. Jalankan `db/001_journal.sql` sekali di Neon. Untuk snapshot Futures Sentiment, jalankan juga `db/002_futures.sql`. |
+| `DATABASE_URL` | fitur Jurnal | Connection string Neon. Jalankan `db/001_journal.sql` sekali di Neon. Untuk Futures Sentiment, jalankan juga `db/002_futures.sql`. |
 | `CRON_SECRET` | production | Minimal 16 karakter acak untuk `/api/cron/prices`. Vercel mengirimnya otomatis. |
 | `DEMO_AUTH` | — | `true` mengaktifkan login demo. Development: aktif otomatis. **Production: mati kecuali `true`.** |
 
