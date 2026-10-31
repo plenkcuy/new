@@ -8,6 +8,15 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
 ];
 
+const csp = [
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "frame-src 'self' https://*.tradingview.com https://*.tradingview-widget.com",
+  "connect-src 'self' https://data-api.binance.vision https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 wss://data-stream.binance.vision",
+].join("; ");
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -18,7 +27,9 @@ const nextConfig: NextConfig = {
     "/api/cron/prices": ["./node_modules/@sparticuz/chromium/bin/**"],
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    const headers =
+      process.env.NODE_ENV === "production" ? [...securityHeaders, { key: "Content-Security-Policy", value: csp }] : securityHeaders;
+    return [{ source: "/:path*", headers }];
   },
   async redirects() {
     // "/" tidak punya halaman sendiri; middleware tetap menjaga /dashboard.

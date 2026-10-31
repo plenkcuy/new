@@ -10,11 +10,16 @@ import {
   type Groups,
   type TechInput,
 } from "./engine";
-import { FUTURES_SYMBOLS, fetchDailyCandles, fetchDerivatives, type RawDerivatives } from "./feed";
+import { fetchCandles, fetchCatalog, fetchDerivs, fetchMarket, type Derivs, type Market, type RawDerivatives } from "./feed";
+import { MAX_WATCH, baseOf, isPair, venueOf, type Catalog, type Venue } from "./symbols";
+
+export type { RawDerivatives } from "./feed";
 
 export type FuturesCard = {
   symbol: string;
   label: string;
+  venue: Venue;
+  hasFutures: boolean;
   ok: boolean;
   metrics: RawDerivatives;
   derivatives: DerivativeResult | null;
@@ -26,23 +31,57 @@ export type FuturesCard = {
 
 export type FuturesSnapshot = { cards: FuturesCard[]; updatedAt: number };
 
-const TTL_MS = 60_000;
-let cache: FuturesSnapshot | null = null;
+const EMPTY: RawDerivatives = { price: null, priceChange24h: null, funding: null, oiChange24h: null, ratio: null, longPct: null, shortPct: null };
 
-async function buildCard(symbol: string, label: string): Promise<FuturesCard> {
+function failed(symbol: string, venue: Venue, reason: string, error?: string): FuturesCard {
+  return { symbol, label: baseOf(symbol), venue, hasFutures: false, ok: false, metrics: EMPTY, derivatives: null, technical: null, bias: "NETRAL", reason, error };
+}
+
+async function buildCard(symbol: string, catalog: Catalog | null): Promise<FuturesCard> {
   const diag: string[] = [];
-  const [metrics, candles] = await Promise.all([fetchDerivatives(symbol, diag), fetchDailyCandles(symbol, diag)]);
+  const known = catalog ? venueOf(catalog, symbol) : null;
+  if (catalog && !known) {
+    return failed(symbol, "spot", "Koin tidak ditemukan di Binance Spot maupun Futures.");
+  }
+
+  const futuresListed = catalog ? catalog.futures.includes(symbol) : true;
+  const order: Venue[] = !catalog ? ["spot", "futures"] : known === "spot" ? (futuresListed ? ["spot", "futures"] : ["spot"]) : ["futures"];
+
+  let venue: Venue = order[0];
+  let market: Market | null = null;
+  for (const v of order) {
+    market = await fetchMarket(symbol, v, diag);
+    if (market) {
+      venue = v;
+      break;
+    }
+  }
+
+  const [derivs, candlesFirst] = await Promise.all([
+    futuresListed ? fetchDerivs(symbol, diag) : Promise.resolve<Derivs | null>(null),
+    market ? fetchCandles(symbol, venue, diag) : Promise.resolve(null),
+  ]);
+  let candles = candlesFirst;
+  if (market && !candles && venue === "spot" && futuresListed) candles = await fetchCandles(symbol, "futures", diag);
+
+  const hasFutures = futuresListed && derivs !== null;
   const error = diag.length ? [...new Set(diag)].slice(0, 2).join(", ") : undefined;
+  const change = market?.change24h ?? null;
+
+  const metrics: RawDerivatives = {
+    price: market?.price ?? null,
+    priceChange24h: change,
+    funding: derivs?.funding ?? null,
+    oiChange24h: derivs?.oiChange24h ?? null,
+    ratio: derivs?.ratio ?? null,
+    longPct: derivs?.longPct ?? null,
+    shortPct: derivs?.shortPct ?? null,
+  };
 
   const derivatives =
-    metrics.priceChange24h === null
-      ? null
-      : scoreDerivatives({
-          priceChange24h: metrics.priceChange24h,
-          oiChange24h: metrics.oiChange24h,
-          funding: metrics.funding,
-          ratio: metrics.ratio,
-        });
+    derivs && change !== null
+      ? scoreDerivatives({ priceChange24h: change, oiChange24h: derivs.oiChange24h, funding: derivs.funding, ratio: derivs.ratio })
+      : null;
 
   const input = candles ? computeTech(candles) : null;
   const technical = input
@@ -56,30 +95,22 @@ async function buildCard(symbol: string, label: string): Promise<FuturesCard> {
       }
     : null;
 
+  const base = { symbol, label: baseOf(symbol), venue, hasFutures, ok: true, metrics, derivatives, technical, error };
+
   if (technical) {
     const { bias, reason } = decide(technical.groups);
-    return { symbol, label, ok: true, metrics, derivatives, technical, bias, reason, error };
+    const note = derivatives ? "" : " Koin ini tidak punya data derivatif, jadi keputusan hanya dari teknikal harian.";
+    return { ...base, bias, reason: reason + note };
   }
   if (derivatives) {
-    return {
-      symbol,
-      label,
-      ok: true,
-      metrics,
-      derivatives,
-      technical: null,
-      bias: derivatives.bias,
-      reason: "Data teknikal harian belum tersedia, keputusan hanya dari screening derivatif.",
-      error,
-    };
+    return { ...base, bias: derivatives.bias, reason: "Data teknikal harian belum tersedia, keputusan hanya dari screening derivatif." };
   }
-  return { symbol, label, ok: false, metrics, derivatives: null, technical: null, bias: "NETRAL", reason: "Data belum bisa diambil, coba lagi sebentar lagi.", error };
+  return { ...base, ok: false, bias: "NETRAL", reason: "Data belum bisa diambil, coba lagi sebentar lagi." };
 }
 
-export async function getFuturesSentiment(options: { fresh?: boolean } = {}): Promise<FuturesSnapshot> {
-  if (!options.fresh && cache && Date.now() - cache.updatedAt < TTL_MS) return cache;
-  const cards = await Promise.all(FUTURES_SYMBOLS.map((s) => buildCard(s.symbol, s.label)));
-  const snapshot = { cards, updatedAt: Date.now() };
-  if (cards.some((c) => c.ok)) cache = snapshot;
-  return snapshot;
+export async function getFuturesSentiment(symbols: string[]): Promise<FuturesSnapshot> {
+  const list = [...new Set(symbols.filter(isPair))].slice(0, MAX_WATCH);
+  const catalog = await fetchCatalog();
+  const cards = await Promise.all(list.map((s) => buildCard(s, catalog)));
+  return { cards, updatedAt: Date.now() };
 }

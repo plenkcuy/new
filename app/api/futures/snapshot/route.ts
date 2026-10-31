@@ -6,9 +6,12 @@ export async function POST(request: Request) {
   const auth = await authorizeApi("premium");
   if (!auth.ok) return auth.response;
 
+  const text = await request.text();
+  if (text.length > 4096) return NextResponse.json({ error: "too_large" }, { status: 413 });
+
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(text);
   } catch {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }

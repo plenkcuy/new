@@ -116,6 +116,20 @@ Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani
 3. Saat tier berubah (upgrade/downgrade), panggil `createSession(user)` lagi supaya cookie ikut diperbarui. Guard server sudah memakai tier terbaru dari repository.
 4. Tambahkan rate limiting & proteksi brute force pada endpoint login.
 
+## Futures Sentiment: pencarian, cache, dan keamanan
+
+- Pencarian koin memakai daftar simbol Binance (Spot dan Futures, pasangan USDT) yang di-cache 6 jam. Data harga dan candle diambil dari Binance Spot lebih dulu; kalau koinnya tidak ada di Spot, dipakai Binance Futures. Funding, OI, dan long short ratio selalu dari Futures dan hanya muncul kalau koin punya kontrak futures.
+- Chart TradingView mengikuti exchange kartu (`BINANCE:BTCUSDT` untuk Spot, `BINANCE:BTCUSDT.P` untuk Futures) dan baru dimuat saat tombol Tampilkan chart ditekan.
+- Cache di browser (`lib/futures/cache.ts`): memori plus localStorage, TTL 45 detik untuk harga dan derivatif, 10 menit untuk candle, 6 jam untuk daftar koin. Permintaan kembar digabung, dan kalau Binance gagal dipakai data cache terakhir.
+- Keamanan, mengikuti OWASP Input Validation Cheat Sheet, HTML5 Security Cheat Sheet, panduan CSP Next.js, dokumentasi embed TradingView, dan dokumentasi REST API Binance:
+  - Input pencarian dinormalisasi lalu dicocokkan dengan allowlist `^[A-Z0-9]{1,15}USDT$`; hanya simbol yang ada di daftar Binance yang dikirim ke API. Aturan yang sama dipakai ulang di server untuk snapshot.
+  - Data dari localStorage tidak dipercaya: divalidasi bentuknya saat dibaca, ditolak kalau rusak atau lebih tua dari 24 jam. Yang disimpan hanya data pasar publik dan daftar koin, tanpa token atau data akun.
+  - Tidak ada `innerHTML` atau `dangerouslySetInnerHTML`; semua teks lewat React.
+  - TradingView dimuat di iframe `sandbox` (tanpa `allow-same-origin`), jadi skripnya tidak bisa menyentuh halaman atau cookie Lumen. Konfigurasinya di-escape sebelum masuk ke dokumen iframe.
+  - Panggilan ke Binance memakai `credentials: omit`, tanpa referrer, host data publik `data-api.binance.vision` untuk Spot, dan berhenti sementara kalau menerima 429 atau 418.
+  - Header CSP produksi (`next.config.ts`): `object-src 'none'`, `base-uri`, `form-action`, `frame-ancestors 'none'`, `frame-src` dan `connect-src` dibatasi ke TradingView dan Binance. `script-src` belum dibatasi karena butuh nonce di semua halaman.
+  - Endpoint snapshot butuh login Premium, menolak isi lebih dari 4 KB, dan hanya menyimpan simbol dan bias yang lolos validasi.
+
 ## Jurnal transaksi
 
 Catatan transaksi disimpan di Neon (`db/001_journal.sql`: aset, transaksi, harga harian, kurs).
