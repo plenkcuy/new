@@ -116,6 +116,17 @@ Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani
 3. Saat tier berubah (upgrade/downgrade), panggil `createSession(user)` lagi supaya cookie ikut diperbarui. Guard server sudah memakai tier terbaru dari repository.
 4. Tambahkan rate limiting & proteksi brute force pada endpoint login.
 
+## Standar UI dan aksesibilitas
+
+Mengacu pada WCAG 2.2 AA, WAI-ARIA Authoring Practices (landmark dan navigasi), pedoman navigasi Material Design 3, dan praktik dashboard dari Nielsen Norman Group.
+
+- Landmark: skip link "Lewati ke konten utama", `header`, dua `nav` berlabel (utama, serta pengaturan dan bantuan), dan satu `main`. Menu aktif memakai `aria-current="page"`.
+- Sidebar 250px di desktop, dikelompokkan per tujuan (Aset Saya, Riset Pasar, Pengelola). Di layar kecil jadi drawer modal: fokus pindah ke tombol tutup, Tab berputar di dalam drawer, Esc menutup dan mengembalikan fokus, konten utama `inert` selama drawer terbuka.
+- Fokus keyboard selalu terlihat (`:focus-visible`, garis 2px, kontras di atas 3:1). Target sentuh minimal 36px, teks minimal 12px.
+- Kontras: teks utama dan sekunder di atas 8:1, tombol dan menu aktif 5:1 ke atas.
+- `prefers-reduced-motion` dihormati. Perpindahan halaman menampilkan skeleton (`app/[tab]/loading.tsx`), bukan layar kosong.
+- Angka memakai `tabular-nums` agar kolom rata.
+
 ## Futures Sentiment: pencarian, cache, dan keamanan
 
 - Pencarian koin memakai daftar simbol Binance (Spot dan Futures, pasangan USDT) yang di-cache 6 jam. Data harga dan candle diambil dari Binance Spot lebih dulu; kalau koinnya tidak ada di Spot, dipakai Binance Futures. Funding, OI, dan long short ratio selalu dari Futures dan hanya muncul kalau koin punya kontrak futures.

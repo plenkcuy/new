@@ -12,6 +12,7 @@
   --muted: #a0aec0;
   --up: #2ee86f;
   --down: #ff5a5f;
+  --focus: #5eead4;
 }
 
 html,
@@ -76,7 +77,7 @@ body {
     border-color: rgba(255, 255, 255, 0.5);
   }
   .pill[data-active="true"] {
-    background: linear-gradient(120deg, #0f8f83 0%, #0b5a54 100%);
+    background: linear-gradient(120deg, #0b7a70 0%, #0b5a54 100%);
     border-color: transparent;
     color: #fff;
   }
@@ -143,8 +144,47 @@ body {
     background: rgba(255, 255, 255, 0.05);
   }
   .nav-item[data-active="true"] {
-    background: linear-gradient(100deg, #0e8a7e 0%, #0a2f2c 100%);
+    background: linear-gradient(100deg, #0b7b71 0%, #0a2f2c 100%);
     color: #fff;
+  }
+
+  .nav-group-label {
+    padding: 0 18px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .skip-link {
+    position: absolute;
+    left: 16px;
+    top: -80px;
+    z-index: 100;
+    border-radius: 999px;
+    background: var(--accent);
+    padding: 12px 22px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #031a18;
+    transition: top 0.15s;
+  }
+  .skip-link:focus-visible {
+    top: 16px;
+  }
+
+  .pill:disabled,
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .skeleton {
+    border-radius: 12px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05));
+    background-size: 200% 100%;
+    animation: skeleton-sweep 1.4s ease-in-out infinite;
   }
 
   /* ---------- Lencana tier ---------- */
@@ -262,7 +302,7 @@ body {
       content: attr(data-label);
       display: block;
       margin-bottom: 2px;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted);
     }
     .data-table.stack td[data-full],
@@ -330,7 +370,7 @@ body {
       content: attr(data-label);
       display: block;
       margin-bottom: 2px;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted);
     }
     .data-table.stack-lg td[data-full],
@@ -386,7 +426,7 @@ body {
       content: attr(data-label);
       display: block;
       margin-bottom: 2px;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted);
     }
     .data-table.stack-xl td[data-full] {
@@ -417,4 +457,29 @@ body {
 
 .recharts-wrapper *:focus {
   outline: none;
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

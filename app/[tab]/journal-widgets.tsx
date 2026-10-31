@@ -59,7 +59,7 @@ function EquityTooltip({ active, payload, metric, report }: TipProps) {
   if (value === undefined) return null;
   return (
     <div className="rounded-2xl border border-white/10 bg-[#0d1717] px-4 py-3 shadow-xl">
-      <div className="text-[11px] text-[var(--muted)]">
+      <div className="text-xs text-[var(--muted)]">
         {dayFmt(point.t, { day: "numeric", month: "short", year: "numeric" })}
       </div>
       <div className="mt-1 text-sm font-medium">{formatMetric(value, metric, report)}</div>

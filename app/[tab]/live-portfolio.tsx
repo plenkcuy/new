@@ -292,7 +292,7 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
                           {r.symbol}
                           {r.direction === "short" && <span className="badge badge-premium ml-2">Short</span>}
                         </div>
-                        <div className="text-[11px] text-[var(--muted)]">{CLASS_LABEL[r.assetClass]}</div>
+                        <div className="text-xs text-[var(--muted)]">{CLASS_LABEL[r.assetClass]}</div>
                       </div>
                     </div>
                   </td>
@@ -300,7 +300,7 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
                   <td className="num" data-label="Harga rata rata">{unitPrice(r.avgPrice, r.ccy)}</td>
                   <td className="num" data-label="Harga" title={r.source ? `Sumber: ${r.source}` : undefined}>
                     {unitPrice(r.price, r.ccy)}
-                    {r.changePct !== null && <div className={`text-[11px] ${r.changePct >= 0 ? "up" : "down"}`}>{pct(r.changePct)}</div>}
+                    {r.changePct !== null && <div className={`text-xs ${r.changePct >= 0 ? "up" : "down"}`}>{pct(r.changePct)}</div>}
                     {r.fromTrade && (
                       <div className="mt-1">
                         <span className="badge badge-free" title="Harga terkini belum tersedia, memakai harga transaksi terakhir">
@@ -312,7 +312,7 @@ export function LivePortfolio({ positions, realized, usdIdr: initialFx, report, 
                   <td className="num" data-label="Nilai">{money(r.value, report)}</td>
                   <td className={`num ${r.unrealized >= 0 ? "up" : "down"}`} data-label="Untung rugi">
                     {money(r.unrealized, report)}
-                    <div className="text-[11px]">{pct(r.unrealizedPct)}</div>
+                    <div className="text-xs">{pct(r.unrealizedPct)}</div>
                   </td>
                   <td className="num" data-label="Alokasi">{r.direction === "short" ? "" : `${decimal(r.share, 1)}%`}</td>
                   <td data-actions>

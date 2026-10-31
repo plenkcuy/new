@@ -253,7 +253,7 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
                         {p.symbol}
                         {p.direction === "short" && <span className="badge badge-premium ml-2">Short</span>}
                       </div>
-                      <div className="text-[11px] text-[var(--muted)]">{CLASS_LABEL[p.assetClass]}</div>
+                      <div className="text-xs text-[var(--muted)]">{CLASS_LABEL[p.assetClass]}</div>
                     </div>
                   </div>
                 </td>
@@ -274,7 +274,7 @@ function PositionsTable({ positions, report }: { positions: JournalData["summary
                 </td>
                 <td className={`num ${tone(p.unrealized)}`} data-label="Untung rugi">
                   {money(p.unrealized, report)}
-                  <div className="text-[11px]">{pct(p.unrealizedPct)}</div>
+                  <div className="text-xs">{pct(p.unrealizedPct)}</div>
                 </td>
                 <td className="num" data-label="Alokasi">{p.direction === "short" ? "" : `${decimal(p.share, 1)}%`}</td>
                 <td data-actions>
@@ -330,7 +330,7 @@ function HistoryTable({
                       <AssetIcon symbol={r.symbol} color={CLASS_COLOR[r.assetClass]} icon={r.icon} size={28} />
                       <div>
                         <div>{r.symbol}</div>
-                        <div className="text-[11px] text-[var(--muted)]">{CLASS_LABEL[r.assetClass]}</div>
+                        <div className="text-xs text-[var(--muted)]">{CLASS_LABEL[r.assetClass]}</div>
                       </div>
                     </div>
                   </td>
@@ -351,7 +351,7 @@ function HistoryTable({
                     {r.result ? (
                       <>
                         <div>{money(r.result.pnl, report)}</div>
-                        <div className="text-[11px]">
+                        <div className="text-xs">
                           {pct(r.result.pnlPct)}
                           {r.result.r !== null && ` · ${decimal(r.result.r)}R`}
                         </div>
@@ -375,7 +375,7 @@ function HistoryTable({
                         </span>
                       ))}
                     </div>
-                    {r.notes && <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--muted)]">{r.notes}</p>}
+                    {r.notes && <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">{r.notes}</p>}
                   </td>
                   <td data-actions>
                     <form action={deleteTrade}>

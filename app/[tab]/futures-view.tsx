@@ -16,6 +16,7 @@ import {
   type Venue,
 } from "@/lib/futures/symbols";
 import { chartDoc, tvLink } from "@/lib/futures/tradingview";
+import { Skeleton } from "@/components/ui";
 import { pct, unitPrice } from "@/lib/shared";
 
 type Tone = "up" | "down" | "flat" | "info";
@@ -126,8 +127,8 @@ function Card({ card, onRemove }: { card: FuturesCard; onRemove: (symbol: string
 
   return (
     <section className="card flex flex-col gap-6 p-6">
-      <header className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1 basis-[11rem]">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-2xl font-medium">{card.label}</span>
             {card.ok && venues.map((v) => <Chip key={v} tone="info">{VENUE_LABEL[v]}</Chip>)}
@@ -421,7 +422,17 @@ export function FuturesView() {
       <SearchBox catalog={catalog} catalogReady={catalogReady} watch={watch ?? []} onAdd={add} />
 
       {!data ? (
-        <div className="card p-6 text-base text-[var(--muted)]">Memuat data futures...</div>
+        <div role="status" aria-live="polite" aria-busy="true" className="grid items-stretch gap-6 lg:grid-cols-2 xl:grid-cols-3">
+          <span className="sr-only">Memuat data futures</span>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="card p-6">
+              <Skeleton className="h-8 w-28" />
+              <Skeleton className="mt-3 h-5 w-40" />
+              <Skeleton className="mt-6 h-5 w-full" />
+              <Skeleton className="mt-6 h-32 w-full" />
+            </div>
+          ))}
+        </div>
       ) : (
         <>
           {ordered.length === 0 ? (

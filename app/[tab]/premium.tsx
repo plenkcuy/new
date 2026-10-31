@@ -100,7 +100,7 @@ export async function AnalysisScreen({ user }: ScreenProps) {
                 <tr key={c.symbol}>
                   <td data-full>
                     <div>{c.symbol}</div>
-                    <div className="text-[11px] text-[var(--muted)]">{c.name}</div>
+                    <div className="text-xs text-[var(--muted)]">{c.name}</div>
                   </td>
                   <td className={`num ${c.pnl >= 0 ? "up" : "down"}`} data-label="Untung rugi">{idr(c.pnl)}</td>
                   <td className={`num ${c.pnlPct >= 0 ? "up" : "down"}`} data-label="% dari modal">{pct(c.pnlPct)}</td>

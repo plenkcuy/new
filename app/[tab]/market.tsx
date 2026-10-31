@@ -63,7 +63,7 @@ export async function MarketScreen({ user, query }: ScreenProps) {
             {MARKET_LABEL[m]}
           </Link>
         ))}
-        {page.updatedAt && <span className="ml-auto text-[11px] text-[var(--muted)]">Diperbarui {clock(page.updatedAt)} WIB</span>}
+        {page.updatedAt && <span className="ml-auto text-xs text-[var(--muted)]">Diperbarui {clock(page.updatedAt)} WIB</span>}
       </div>
 
       {page.overview.length > 0 && (
@@ -118,7 +118,7 @@ export async function MarketScreen({ user, query }: ScreenProps) {
                       <AssetIcon symbol={i.symbol} color={MARKET_COLOR[market]} icon={i.icon} size={32} />
                       <div>
                         <div>{i.symbol}</div>
-                        <div className="max-w-[240px] truncate text-[11px] text-[var(--muted)]">{i.name}</div>
+                        <div className="max-w-[240px] truncate text-xs text-[var(--muted)]">{i.name}</div>
                       </div>
                     </div>
                   </td>

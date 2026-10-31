@@ -55,7 +55,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                   >
                     <div>
                       <div className="text-sm">{user.name}</div>
-                      <div className="mt-1 text-[11px] text-[var(--muted)]">
+                      <div className="mt-1 text-xs text-[var(--muted)]">
                         {DEMO_NOTES[user.id as (typeof DEMO_USER_IDS)[number]]}
                       </div>
                     </div>
@@ -64,7 +64,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                 </form>
               ) : null,
             )}
-            <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+            <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
               Mode demo: bukan autentikasi produksi. Ganti dengan login sungguhan sebelum dipakai pengguna nyata (lihat
               README).
             </p>

@@ -8,6 +8,10 @@ import { TIER_LABEL, deniedRedirect } from "@/lib/access";
 import type { Tier } from "@/lib/shared";
 import { FitText } from "./fit-text";
 
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`skeleton ${className}`} aria-hidden />;
+}
+
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-3">
@@ -29,7 +33,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
           );
         })}
       </svg>
-      <span className={`text-xl font-medium tracking-tight ${compact ? "hidden sm:inline" : ""}`}>Lumen Invest</span>
+      <span className={`whitespace-nowrap text-xl font-medium tracking-tight ${compact ? "hidden sm:inline" : ""}`}>Lumen Invest</span>
     </div>
   );
 }
@@ -69,7 +73,7 @@ export function StatCard({
   return (
     <div className="card p-6">
       <div className="text-sm text-[var(--muted)]">{label}</div>
-      <div className={`mt-2 font-medium tracking-tight ${tone ?? ""}`}>
+      <div className={`mt-2 font-medium tracking-tight tabular-nums ${tone ?? ""}`}>
         {typeof value === "string" ? (
           <FitText max={24} min={11}>
             {value}

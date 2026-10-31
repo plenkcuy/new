@@ -216,7 +216,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
               Tutup
             </button>
           </div>
-          <p className="mt-1.5 text-[11px] text-[var(--muted)]" data-testid="side-caption">
+          <p className="mt-1.5 text-xs text-[var(--muted)]" data-testid="side-caption">
             Dicatat sebagai {side === "buy" ? "beli" : "jual"}
             {direction === "short" && action === "open" ? " (membuka short)" : ""}
             {direction === "short" && action === "close" ? " (cover short)" : ""}
@@ -390,7 +390,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
                       {minus(`${preview.r >= 0 ? "+" : ""}${preview.r.toFixed(2).replace(".", ",")}R`)}
                     </span>
                   )}
-                  <p className="mt-1 text-[11px] text-[var(--muted)]">
+                  <p className="mt-1 text-xs text-[var(--muted)]">
                     Sudah dikurangi fee{closed ? " entry dan close" : ""}. Fee yang kosong diperkirakan dari persentase bawaan.
                     {direction === "short" && " Short dihitung tanpa margin, bunga, atau funding. Pakai PnL manual bila perlu."}
                   </p>
@@ -419,7 +419,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
                 onChange={(e) => setPnlManual(e.target.value)}
                 placeholder="Contoh 250000. Pakai minus di depan untuk rugi"
               />
-              <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+              <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
                 Angka ini dianggap sudah bersih (fee, pajak, funding) dan menggantikan hitungan otomatis. Fee yang kamu isi hanya dicatat.
               </p>
             </div>
@@ -439,7 +439,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
               onChange={(e) => setRiskStop(e.target.value)}
               placeholder={closeTarget?.stop ? plain(closeTarget.stop) : ""}
             />
-            <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
+            <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
               Hanya untuk menghitung R (hasil dibanding risiko awal), bukan order stop loss.
               {closeTarget?.stop ? " Kosongkan untuk memakai stop awal posisi ini." : ""}
               {direction === "short" ? " Untuk short, stop berada di atas harga entry." : " Untuk long, stop berada di bawah harga entry."}
@@ -493,7 +493,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
             <input id="takeProfit" name="takeProfit" inputMode="decimal" autoComplete="off" className={field} disabled={closing} />
           </div>
           {closing && (
-            <p className="text-[11px] leading-relaxed text-[var(--muted)] sm:col-span-2 xl:col-span-4" data-testid="sltp-note">
+            <p className="text-xs leading-relaxed text-[var(--muted)] sm:col-span-2 xl:col-span-4" data-testid="sltp-note">
               Stop loss dan take profit nonaktif karena {closed ? "posisi ditandai close" : "ini transaksi penutup posisi"}. Untuk menghitung R, isi Stop awal di blok Hasil.
             </p>
           )}

@@ -102,7 +102,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
               {minus(moneyFit(summary.net, report))}
             </FitText>
           </div>
-          <div className="mt-1 text-[11px] text-[var(--muted)]">{num(summary.trades)} transaksi tertutup</div>
+          <div className="mt-1 text-xs text-[var(--muted)]">{num(summary.trades)} transaksi tertutup</div>
         </div>
 
         <div className="card flex min-w-0 flex-col items-center justify-center p-4 sm:p-5">
@@ -130,7 +130,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
               {summary.winRate}%
             </span>
           </div>
-          <div className="mt-2 text-[11px] text-[var(--muted)]">
+          <div className="mt-2 text-xs text-[var(--muted)]">
             {summary.winDays} profit · {summary.lossDays} rugi
           </div>
         </div>
@@ -142,7 +142,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
               {summary.best && summary.best.pnl > 0 ? minus(moneyFit(summary.best.pnl, report)) : "Belum ada"}
             </FitText>
           </div>
-          <div className="mt-1 text-[11px] text-[var(--muted)]">
+          <div className="mt-1 text-xs text-[var(--muted)]">
             {summary.best && summary.best.pnl > 0 ? `Tanggal ${dayLabel(summary.best.key)}` : "\u00A0"}
           </div>
         </div>
@@ -154,7 +154,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
               {summary.worst && summary.worst.pnl < 0 ? minus(moneyFit(summary.worst.pnl, report)) : "Belum ada"}
             </FitText>
           </div>
-          <div className="mt-1 text-[11px] text-[var(--muted)]">
+          <div className="mt-1 text-xs text-[var(--muted)]">
             {summary.worst && summary.worst.pnl < 0 ? `Tanggal ${dayLabel(summary.worst.key)}` : "\u00A0"}
           </div>
         </div>
@@ -174,7 +174,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
           </button>
         </div>
 
-        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase tracking-wider text-[var(--muted)] sm:mb-3 sm:gap-2 sm:text-[10px]">
+        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase tracking-wider text-[var(--muted)] sm:mb-3 sm:gap-2 sm:text-xs">
           {WEEKDAYS.map((d) => (
             <div key={d}>{d}</div>
           ))}
@@ -187,7 +187,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
               className="flex aspect-square items-center justify-center rounded-2xl border border-white/[0.02] bg-white/[0.01] opacity-30"
               aria-hidden
             >
-              <span className="text-[10px] text-[var(--muted)]">{prevMonthDays - firstWeekday + i + 1}</span>
+              <span className="text-[11px] text-[var(--muted)]">{prevMonthDays - firstWeekday + i + 1}</span>
             </div>
           ))}
 
@@ -227,7 +227,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
                 {isToday && (
                   <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-white shadow-[0_0_5px_white]" aria-hidden />
                 )}
-                <span className={`absolute left-1.5 top-1 text-[9px] font-bold ${dateColor}`}>{d}</span>
+                <span className={`absolute left-1.5 top-1 text-[11px] font-bold ${dateColor}`}>{d}</span>
                 {pnl !== 0 ? (
                   <span className={`mt-2 block w-full px-0.5 font-extrabold tracking-tight ${text}`}>
                     <FitText max={12} min={6} className="text-center">
@@ -247,7 +247,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
               className="flex aspect-square items-center justify-center rounded-2xl border border-white/[0.02] bg-white/[0.01] opacity-30"
               aria-hidden
             >
-              <span className="text-[10px] text-[var(--muted)]">{i + 1}</span>
+              <span className="text-[11px] text-[var(--muted)]">{i + 1}</span>
             </div>
           ))}
         </div>
@@ -284,13 +284,13 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
                       <li key={`${t.symbol}${i}`} className="flex items-center justify-between gap-3 py-3 text-sm">
                         <div className="min-w-0">
                           <div className="truncate font-semibold">{t.symbol}</div>
-                          <div className="text-[11px] text-[var(--muted)]">
+                          <div className="text-xs text-[var(--muted)]">
                             {CLASS_LABEL[t.assetClass]} · {t.direction === "short" ? "cover" : "jual"} {t.assetClass === "idx" ? `${num(t.qty / IDX_LOT)} lot` : quantity(t.qty)}
                           </div>
                         </div>
                         <div className={`shrink-0 text-right ${t.pnl >= 0 ? "up" : "down"}`}>
                           <div className="font-bold">{minus(money(t.pnl, report))}</div>
-                          <div className="text-[11px]">
+                          <div className="text-xs">
                             {minus(pct(t.pnlPct))}
                             {t.r !== null && ` · ${minus(decimal(t.r))}R`}
                             {t.manual && " · manual"}

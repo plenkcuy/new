@@ -70,7 +70,7 @@ export async function AdminScreen({ query }: ScreenProps) {
                 <tr key={u.id}>
                   <td>
                     <div>{u.name}</div>
-                    <div className="text-[11px] text-[var(--muted)]">{u.email}</div>
+                    <div className="text-xs text-[var(--muted)]">{u.email}</div>
                   </td>
                   <td>
                     <TierBadge tier={u.tier} />

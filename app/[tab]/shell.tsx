@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   BarChart3,
@@ -30,26 +30,57 @@ import type { SessionUser, Tier } from "@/lib/shared";
  * `requiredTierFor(href)` (lib/access.ts) supaya satu sumber kebenaran.
  */
 type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavGroup = { id: string; label: string; items: NavItem[] };
 
-const NAV_MAIN: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/portfolio", label: "Portofolio", icon: Briefcase },
-  { href: "/journal", label: "Jurnal", icon: BookOpen },
-  { href: "/calendar", label: "Kalender", icon: CalendarDays },
-  { href: "/analysis", label: "Analisis", icon: BarChart3 },
-  { href: "/futures", label: "Futures", icon: Activity },
-  { href: "/market", label: "Pasar", icon: LineChart },
+const NAV_GROUPS: NavGroup[] = [
+  {
+    id: "aset",
+    label: "Aset Saya",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/portfolio", label: "Portofolio", icon: Briefcase },
+      { href: "/journal", label: "Jurnal", icon: BookOpen },
+      { href: "/calendar", label: "Kalender", icon: CalendarDays },
+    ],
+  },
+  {
+    id: "riset",
+    label: "Riset Pasar",
+    items: [
+      { href: "/analysis", label: "Analisis", icon: BarChart3 },
+      { href: "/futures", label: "Futures", icon: Activity },
+      { href: "/market", label: "Pasar", icon: LineChart },
+    ],
+  },
 ];
 /** Hanya ditampilkan untuk Admin. */
-const NAV_ADMIN: NavItem = { href: "/admin", label: "Admin", icon: ShieldCheck };
+const NAV_ADMIN: NavGroup = {
+  id: "admin",
+  label: "Pengelola",
+  items: [{ href: "/admin", label: "Admin", icon: ShieldCheck }],
+};
 const NAV_FOOTER: NavItem[] = [
   { href: "/settings", label: "Pengaturan", icon: Settings },
   { href: "/support", label: "Bantuan", icon: LifeBuoy },
 ];
 
-function Sidebar({ tier, open, onClose }: { tier: Tier; open: boolean; onClose: () => void }) {
+const SIDEBAR_ID = "sidebar";
+
+function Sidebar({
+  tier,
+  open,
+  onClose,
+  panelRef,
+  closeRef,
+}: {
+  tier: Tier;
+  open: boolean;
+  onClose: (returnFocus: boolean) => void;
+  panelRef: React.Ref<HTMLDivElement>;
+  closeRef: React.Ref<HTMLButtonElement>;
+}) {
   const pathname = usePathname();
-  const main = hasTier(tier, "admin") ? [...NAV_MAIN, NAV_ADMIN] : NAV_MAIN;
+  const groups = hasTier(tier, "admin") ? [...NAV_GROUPS, NAV_ADMIN] : NAV_GROUPS;
 
   const renderItem = (item: NavItem) => {
     const required = requiredTierFor(item.href);
@@ -58,46 +89,75 @@ function Sidebar({ tier, open, onClose }: { tier: Tier; open: boolean; onClose: 
     const Icon = item.icon;
 
     return (
-      <Link
-        key={item.href}
-        // Menu terkunci langsung menuju halaman upgrade (tanpa redirect tambahan).
-        href={locked ? deniedRedirect(required, item.href) : item.href}
-        className="nav-item"
-        data-active={active}
-        aria-current={active ? "page" : undefined}
-        onClick={onClose}
-      >
-        <Icon size={20} strokeWidth={1.6} />
-        <span>{item.label}</span>
-        {locked && (
-          <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-medium text-[var(--accent)]">
-            <Lock size={12} /> PRO
-          </span>
-        )}
-      </Link>
+      <li key={item.href}>
+        <Link
+          // Menu terkunci langsung menuju halaman upgrade (tanpa redirect tambahan).
+          href={locked ? deniedRedirect(required, item.href) : item.href}
+          className="nav-item"
+          data-active={active}
+          aria-current={active ? "page" : undefined}
+          onClick={() => onClose(false)}
+        >
+          <Icon size={20} strokeWidth={1.6} aria-hidden />
+          <span>{item.label}</span>
+          {locked && (
+            <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)]">
+              <Lock size={12} aria-hidden /> PRO
+            </span>
+          )}
+        </Link>
+      </li>
     );
   };
 
   return (
-    <aside
-      aria-label="Navigasi utama"
+    <div
+      id={SIDEBAR_ID}
+      ref={panelRef}
+      role={open ? "dialog" : undefined}
+      aria-modal={open ? true : undefined}
+      aria-label={open ? "Menu navigasi" : undefined}
       className={[
-        "card fixed inset-y-3 left-3 z-50 flex w-[250px] max-w-[85vw] flex-col overflow-y-auto p-4",
+        "card fixed inset-y-3 left-3 z-50 flex w-[280px] max-w-[85vw] flex-col overflow-y-auto p-4",
         "transition-[transform,visibility] duration-300 ease-out",
         open ? "visible translate-x-0" : "invisible -translate-x-[115%]",
         "lg:visible lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0",
       ].join(" ")}
     >
-      <div className="flex items-center justify-between px-3 pb-8 pt-4">
-        <Brand />
-        <button type="button" className="icon-btn h-10! w-10! lg:hidden" aria-label="Tutup menu" onClick={onClose}>
-          <X size={18} />
-        </button>
-      </div>
+      <nav aria-label="Navigasi utama" className="flex flex-col">
+        <div className="flex items-center justify-between px-3 pb-8 pt-4">
+          <Link href="/dashboard" aria-label="Lumen Invest, ke dashboard" className="rounded-xl" onClick={() => onClose(false)}>
+            <Brand />
+          </Link>
+          <button
+            ref={closeRef}
+            type="button"
+            className="icon-btn h-10! w-10! lg:hidden"
+            aria-label="Tutup menu"
+            onClick={() => onClose(true)}
+          >
+            <X size={18} aria-hidden />
+          </button>
+        </div>
 
-      <nav className="flex flex-col gap-1.5">{main.map(renderItem)}</nav>
-      <nav className="mt-auto flex flex-col gap-1 pb-2 pt-6">{NAV_FOOTER.map(renderItem)}</nav>
-    </aside>
+        <div className="flex flex-col gap-6">
+          {groups.map((group) => (
+            <div key={group.id}>
+              <p id={`nav-${group.id}`} className="nav-group-label">
+                {group.label}
+              </p>
+              <ul aria-labelledby={`nav-${group.id}`} className="mt-2 flex flex-col gap-1.5">
+                {group.items.map(renderItem)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </nav>
+
+      <nav aria-label="Pengaturan dan bantuan" className="mt-auto pb-2 pt-6">
+        <ul className="flex flex-col gap-1">{NAV_FOOTER.map(renderItem)}</ul>
+      </nav>
+    </div>
   );
 }
 
@@ -111,7 +171,7 @@ function UserMenu({ user }: { user: SessionUser }) {
 
   return (
     <div className="flex items-center gap-3">
-      <Link href="/settings" className="flex items-center gap-3" aria-label="Buka pengaturan akun">
+      <Link href="/settings" className="flex items-center gap-3 rounded-full" aria-label={`Buka pengaturan akun ${user.name}`}>
         <div
           className="flex h-12 w-12 items-center justify-center rounded-full text-base font-medium text-white"
           style={{ background: "linear-gradient(135deg,#14b8a6,#115e59)" }}
@@ -129,7 +189,7 @@ function UserMenu({ user }: { user: SessionUser }) {
 
       <form action={logout}>
         <button type="submit" className="icon-btn" aria-label="Keluar" title="Keluar">
-          <LogOut size={20} strokeWidth={1.6} />
+          <LogOut size={20} strokeWidth={1.6} aria-hidden />
         </button>
       </form>
     </div>
@@ -138,12 +198,55 @@ function UserMenu({ user }: { user: SessionUser }) {
 
 export function AppShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
 
-  // Tutup drawer dengan Esc dan kunci scroll halaman saat drawer terbuka.
+  const close = useCallback((returnFocus: boolean) => {
+    restoreFocus.current = returnFocus;
+    setOpen(false);
+  }, []);
+
+  // Drawer terbuka: fokus pindah ke tombol tutup. Saat ditutup lewat Esc atau tombol tutup, fokus kembali ke tombol menu.
+  useEffect(() => {
+    if (open) {
+      // Di awal transisi sidebar masih `visibility: hidden` dan belum bisa difokuskan, jadi dicoba lagi tiap frame sampai berhasil.
+      let frame = 0;
+      let tries = 0;
+      const attempt = () => {
+        closeRef.current?.focus();
+        if (document.activeElement !== closeRef.current && tries++ < 20) frame = requestAnimationFrame(attempt);
+      };
+      frame = requestAnimationFrame(attempt);
+      return () => cancelAnimationFrame(frame);
+    }
+    if (restoreFocus.current) {
+      restoreFocus.current = false;
+      menuRef.current?.focus();
+    }
+  }, [open]);
+
+  // Esc menutup drawer, Tab berputar di dalam drawer, dan scroll halaman dikunci selama drawer terbuka.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        close(true);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const nodes = panelRef.current?.querySelectorAll<HTMLElement>("a[href], button:not([disabled])");
+      if (!nodes || !nodes.length) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -151,33 +254,58 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [open]);
+  }, [open, close]);
+
+  // Layar melebar ke desktop: sidebar sudah permanen, jadi drawer dan kunci scroll dilepas.
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => {
+      if (query.matches) setOpen(false);
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
 
   return (
     <div className="mx-auto min-h-screen max-w-[1600px] p-3 sm:p-5">
+      <a href="#konten" className="skip-link">
+        Lewati ke konten utama
+      </a>
+
       {/* Jangan pakai backdrop-filter di pembungkus ini: itu membuat elemen `fixed`
           (drawer) berpatokan ke pembungkus, bukan ke layar. */}
       <div className="grid gap-6 rounded-[32px] border border-white/5 bg-white/[0.04] p-3 sm:p-6 lg:grid-cols-[250px_1fr]">
-        {open && (
-          <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setOpen(false)} aria-hidden />
-        )}
+        {open && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => close(true)} aria-hidden />}
 
-        <Sidebar tier={user.tier} open={open} onClose={() => setOpen(false)} />
+        <Sidebar tier={user.tier} open={open} onClose={close} panelRef={panelRef} closeRef={closeRef} />
 
-        <main className="relative flex min-w-0 flex-col gap-6">
+        <div className="relative flex min-w-0 flex-col gap-6">
           {/* Mobile: baris atas biasa. Desktop: menu pengguna melayang di kanan atas. */}
-          <div className="flex items-center justify-between gap-3 lg:absolute lg:right-0 lg:top-0 lg:z-10">
+          <header
+            inert={open}
+            className="flex items-center justify-between gap-3 lg:absolute lg:right-0 lg:top-0 lg:z-10"
+          >
             <div className="flex items-center gap-3 lg:hidden">
-              <button type="button" className="icon-btn" aria-label="Buka menu" onClick={() => setOpen(true)}>
-                <Menu size={20} />
+              <button
+                ref={menuRef}
+                type="button"
+                className="icon-btn"
+                aria-label="Buka menu"
+                aria-expanded={open}
+                aria-controls={SIDEBAR_ID}
+                onClick={() => setOpen(true)}
+              >
+                <Menu size={20} aria-hidden />
               </button>
               <Brand compact />
             </div>
             <UserMenu user={user} />
-          </div>
+          </header>
 
-          {children}
-        </main>
+          <main id="konten" tabIndex={-1} inert={open} className="flex min-w-0 flex-col gap-6 outline-none">
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );
