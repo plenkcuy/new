@@ -38,7 +38,7 @@ export async function CalendarScreen({ user, query }: ScreenProps) {
   return (
     <>
       {header}
-      <div className="mx-auto w-full max-w-[640px]">
+      <div className="w-full">
         <CalendarView
           days={data.days}
           report={report}

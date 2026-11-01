@@ -483,3 +483,28 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+@media (min-width: 1024px) {
+  .nav-item[data-rail="true"]::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: calc(100% + 14px);
+    top: 50%;
+    z-index: 60;
+    transform: translateY(-50%);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: #0b1515;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text);
+    transition: opacity 0.15s;
+  }
+  .nav-item[data-rail="true"]:hover::after,
+  .nav-item[data-rail="true"]:focus-visible::after {
+    opacity: 1;
+  }
+}

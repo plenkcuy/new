@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { Lock } from "lucide-react";
 import { AssetIcon } from "@/components/asset-icon";
 import { FitText } from "@/components/fit-text";
-import { PageHeader } from "@/components/ui";
+import { AutoRefresh } from "@/components/auto-refresh";
+import { PageHeader, Skeleton } from "@/components/ui";
 import { MARKET_MAX_AGE_MS, deniedRedirect, limitsFor } from "@/lib/access";
 import { getMarketPage } from "@/lib/market-lists";
 import {
@@ -13,6 +15,7 @@ import {
   isMarket,
   pct,
   unitPrice,
+  type Market,
   type ScreenProps,
 } from "@/lib/shared";
 
@@ -49,10 +52,6 @@ export async function MarketScreen({ user, query }: ScreenProps) {
     );
   }
 
-  const page = await getMarketPage(market, def, MARKET_MAX_AGE_MS[marketFeed]);
-  const showCap = page.items.some((i) => i.capLabel);
-  const show7d = page.items.some((i) => i.change7d !== null);
-
   return (
     <>
       {header}
@@ -63,7 +62,61 @@ export async function MarketScreen({ user, query }: ScreenProps) {
             {MARKET_LABEL[m]}
           </Link>
         ))}
-        {page.updatedAt && <span className="ml-auto text-xs text-[var(--muted)]">Diperbarui {clock(page.updatedAt)} WIB</span>}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {defs.map((d) => (
+          <Link key={d.key} href={href(market, d.key)} className="pill" data-active={def.key === d.key}>
+            {d.label}
+          </Link>
+        ))}
+      </div>
+
+      <Suspense key={`${market}:${def.key}`} fallback={<MarketSkeleton />}>
+        <MarketData market={market} listKey={def.key} maxAgeMs={MARKET_MAX_AGE_MS[marketFeed]} />
+      </Suspense>
+    </>
+  );
+}
+
+function MarketSkeleton() {
+  return (
+    <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-5">
+      <span className="sr-only">Memuat data pasar</span>
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="card p-5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-4 h-7 w-32" />
+          </div>
+        ))}
+      </div>
+      <div className="card p-6">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+          <div key={i} className="flex items-center gap-4 py-3">
+            <Skeleton className="size-8 rounded-full" />
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="ml-auto h-4 w-24" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+async function MarketData({ market, listKey, maxAgeMs }: { market: Market; listKey: string; maxAgeMs: number }) {
+  const defs = LIST_DEFS[market];
+  const def = defs.find((d) => d.key === listKey) ?? defs[0];
+  const page = await getMarketPage(market, def, maxAgeMs);
+  const showCap = page.items.some((i) => i.capLabel);
+  const show7d = page.items.some((i) => i.change7d !== null);
+
+  return (
+    <>
+      <AutoRefresh />
+      <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-[var(--muted)]">
+        {page.updatedAt ? <span>Diperbarui {clock(page.updatedAt)} WIB</span> : null}
+        <span>Otomatis tiap 5 menit</span>
       </div>
 
       {page.overview.length > 0 && (
@@ -81,14 +134,6 @@ export async function MarketScreen({ user, query }: ScreenProps) {
           ))}
         </div>
       )}
-
-      <div className="flex flex-wrap gap-2">
-        {defs.map((d) => (
-          <Link key={d.key} href={href(market, d.key)} className="pill" data-active={def.key === d.key}>
-            {d.label}
-          </Link>
-        ))}
-      </div>
 
       <section className="card overflow-x-auto">
         {page.items.length === 0 ? (

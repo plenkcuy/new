@@ -20,7 +20,7 @@ Buka `/login`, pilih akun demo **Free**, **Premium**, atau **Admin**.
 | Route | Akses | Keterangan |
 |---|---|---|
 | `/login` | publik | Login demo |
-| `/dashboard` | Free | Ringkasan. Insight AI, rentang grafik 6M/1Y, dan watchlist penuh terkunci untuk Free |
+| `/dashboard` | Free | Ringkasan. Cek Perilaku Trading (overtrading dan pola hoki), rentang grafik 6M/1Y, dan watchlist penuh terkunci untuk Free |
 | `/portfolio` | Free | Posisi & alokasi. Ekspor CSV khusus Premium |
 | `/journal` | Free | Jurnal transaksi saham IDX, saham US, crypto, meme coin. Free dibatasi 30 transaksi, analitik dan ekspor CSV khusus Premium |
 | `/market` | Free | Indeks & saham. Feed tertunda (Free) / real-time (Premium) |
@@ -28,7 +28,6 @@ Buka `/login`, pilih akun demo **Free**, **Premium**, atau **Admin**.
 | `/settings`, `/support`, `/upgrade` | Free | Akun, FAQ, perbandingan paket |
 | `/futures` | **Premium** | Futures Sentiment: funding rate, open interest, long short ratio, dan konfluensi teknikal harian (BTC, ETH, SOL) |
 | `/admin` | **Admin** | Ringkasan sistem + daftar pengguna |
-| `POST /api/futures/snapshot` | Premium | Simpan bias terakhir milik pengguna (maks tiap 30 menit) untuk kartu Insight AI |
 | `GET /api/export` | Premium | CSV portofolio |
 | `GET /api/journal/export` | Premium | CSV jurnal transaksi |
 | `GET /api/prices` | Login | Harga terkini posisi terbuka milik pengguna (Free tiap 60 detik, Premium tiap 10 detik) |
@@ -89,7 +88,7 @@ Sesi = cookie `httpOnly`, `sameSite=lax`, `secure` di production, ditandatangani
 | Variabel | Wajib | Keterangan |
 |---|---|---|
 | `AUTH_SECRET` | production | Minimal 32 karakter acak (`openssl rand -base64 48`). Tanpa ini sesi ditolak. |
-| `DATABASE_URL` | fitur Jurnal | Connection string Neon. Jalankan `db/001_journal.sql` sekali di Neon. Untuk Futures Sentiment, jalankan juga `db/002_futures.sql`. |
+| `DATABASE_URL` | fitur Jurnal | Connection string Neon. Jalankan `db/001_journal.sql` sekali di Neon. |
 | `CRON_SECRET` | production | Minimal 16 karakter acak untuk `/api/cron/prices`. Vercel mengirimnya otomatis. |
 | `DEMO_AUTH` | — | `true` mengaktifkan login demo. Development: aktif otomatis. **Production: mati kecuali `true`.** |
 
@@ -122,10 +121,31 @@ Mengacu pada WCAG 2.2 AA, WAI-ARIA Authoring Practices (landmark dan navigasi), 
 
 - Landmark: skip link "Lewati ke konten utama", `header`, dua `nav` berlabel (utama, serta pengaturan dan bantuan), dan satu `main`. Menu aktif memakai `aria-current="page"`.
 - Sidebar 250px di desktop, dikelompokkan per tujuan (Aset Saya, Riset Pasar, Pengelola). Di layar kecil jadi drawer modal: fokus pindah ke tombol tutup, Tab berputar di dalam drawer, Esc menutup dan mengembalikan fokus, konten utama `inert` selama drawer terbuka.
+- Sidebar bisa diperkecil jadi mode ikon di desktop (tooltip dan label tetap tersedia untuk pembaca layar). Pilihannya disimpan di cookie `lumen_sidebar` supaya server merender lebar yang benar sejak awal.
 - Fokus keyboard selalu terlihat (`:focus-visible`, garis 2px, kontras di atas 3:1). Target sentuh minimal 36px, teks minimal 12px.
 - Kontras: teks utama dan sekunder di atas 8:1, tombol dan menu aktif 5:1 ke atas.
 - `prefers-reduced-motion` dihormati. Perpindahan halaman menampilkan skeleton (`app/[tab]/loading.tsx`), bukan layar kosong.
 - Angka memakai `tabular-nums` agar kolom rata.
+
+## Futures Sentiment: tampilan dan memecoin
+
+- Satu koin aktif ditampilkan penuh: chart TradingView di atas, lalu keputusan, keyakinan sinyal, dan detail analisis yang bisa dibuka. Koin lain tinggal dipilih dari deretan chip.
+- Latar kartu mengikuti bias: hitam ke merah untuk SHORT, hitam ke hijau untuk LONG, makin pekat makin tinggi keyakinan. Bias selalu disertai ikon dan teks, jadi tidak bergantung pada warna saja.
+- Pencarian koin bisa diminimize (pilihan diingat di browser). Tombol Perbarui mengambil data baru dan punya jeda 10 detik supaya tidak kena batas permintaan Binance.
+- Memecoin yang listing di Binance didukung. Kontrak futures memecoin memakai awalan 1000 atau 1000000 (misalnya `1000PEPEUSDT`), jadi pencarian PEPE otomatis memadukan harga Spot `PEPEUSDT` dengan derivatif `1000PEPEUSDT`. Token yang hanya ada di DEX belum didukung.
+
+## Pasar: cache dan refresh
+
+- Bacaan daftar pasar dari database dibungkus `unstable_cache` (5 menit, tag `market-lists`) dan dibersihkan lewat `revalidateTag` setelah scrape berhasil. Isinya hanya data publik yang sama untuk semua pengguna; data per pengguna tidak boleh masuk cache ini (OWASP Web Cache Security).
+- Bagian atas halaman (judul dan tab) tampil langsung, sedangkan tabel di-stream lewat Suspense dengan skeleton. Halaman memuat ulang datanya sendiri tiap 5 menit selama tab dilihat.
+
+## Cek Perilaku Trading (dashboard)
+
+Dihitung dari jurnal milik pengguna sendiri di `lib/behavior.ts`, per pengguna dan tanpa cache bersama.
+
+- Overtrading dibandingkan dengan kebiasaanmu sendiri (bukan angka tetap, karena tidak ada batas yang berlaku untuk semua orang): frekuensi minggu ini terhadap median dan MAD 90 hari sebelumnya, transaksi beruntun kurang dari 15 menit, transaksi baru dalam 30 menit setelah rugi, dan hasil yang memburuk di hari ramai. Skor 0 sampai 100.
+- Pola hoki memakai uji t (nilai p dari distribusi t Student) pada hasil per transaksi, ketergantungan pada satu atau dua transaksi besar, dan panjang rentetan menang dibanding perkiraan acak. Butuh minimal 20 transaksi tertutup.
+- Hasilnya indikasi statistik, bukan kepastian atau saran investasi.
 
 ## Futures Sentiment: pencarian, cache, dan keamanan
 
@@ -133,13 +153,12 @@ Mengacu pada WCAG 2.2 AA, WAI-ARIA Authoring Practices (landmark dan navigasi), 
 - Chart TradingView mengikuti exchange kartu (`BINANCE:BTCUSDT` untuk Spot, `BINANCE:BTCUSDT.P` untuk Futures) dan baru dimuat saat tombol Tampilkan chart ditekan.
 - Cache di browser (`lib/futures/cache.ts`): memori plus localStorage, TTL 45 detik untuk harga dan derivatif, 10 menit untuk candle, 6 jam untuk daftar koin. Permintaan kembar digabung, dan kalau Binance gagal dipakai data cache terakhir.
 - Keamanan, mengikuti OWASP Input Validation Cheat Sheet, HTML5 Security Cheat Sheet, panduan CSP Next.js, dokumentasi embed TradingView, dan dokumentasi REST API Binance:
-  - Input pencarian dinormalisasi lalu dicocokkan dengan allowlist `^[A-Z0-9]{1,15}USDT$`; hanya simbol yang ada di daftar Binance yang dikirim ke API. Aturan yang sama dipakai ulang di server untuk snapshot.
+  - Input pencarian dinormalisasi lalu dicocokkan dengan allowlist `^[A-Z0-9]{1,15}USDT$`; hanya simbol yang ada di daftar Binance yang dikirim ke API.
   - Data dari localStorage tidak dipercaya: divalidasi bentuknya saat dibaca, ditolak kalau rusak atau lebih tua dari 24 jam. Yang disimpan hanya data pasar publik dan daftar koin, tanpa token atau data akun.
   - Tidak ada `innerHTML` atau `dangerouslySetInnerHTML`; semua teks lewat React.
   - TradingView dimuat di iframe `sandbox` (tanpa `allow-same-origin`), jadi skripnya tidak bisa menyentuh halaman atau cookie Lumen. Konfigurasinya di-escape sebelum masuk ke dokumen iframe.
   - Panggilan ke Binance memakai `credentials: omit`, tanpa referrer, host data publik `data-api.binance.vision` untuk Spot, dan berhenti sementara kalau menerima 429 atau 418.
   - Header CSP produksi (`next.config.ts`): `object-src 'none'`, `base-uri`, `form-action`, `frame-ancestors 'none'`, `frame-src` dan `connect-src` dibatasi ke TradingView dan Binance. `script-src` belum dibatasi karena butuh nonce di semua halaman.
-  - Endpoint snapshot butuh login Premium, menolak isi lebih dari 4 KB, dan hanya menyimpan simbol dan bias yang lolos validasi.
 
 ## Jurnal transaksi
 

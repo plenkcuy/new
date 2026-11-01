@@ -84,6 +84,24 @@ export async function cached<T>(
   return run;
 }
 
+export function invalidate(prefixes: string[]): void {
+  for (const key of [...memory.keys()]) {
+    if (prefixes.some((p) => key.startsWith(p))) memory.delete(key);
+  }
+  const store = storage();
+  if (!store) return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i);
+      if (key && key.startsWith(PREFIX) && prefixes.some((p) => key.slice(PREFIX.length).startsWith(p))) keys.push(key);
+    }
+    keys.forEach((key) => store.removeItem(key));
+  } catch {
+    return;
+  }
+}
+
 export function clearCache(): void {
   memory.clear();
   inflight.clear();

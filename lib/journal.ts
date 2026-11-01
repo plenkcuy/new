@@ -1,9 +1,11 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
+import { analyzeLuck, analyzeOvertrading, type ClosedEvent, type EntryEvent, type LuckResult, type OvertradingResult } from "./behavior";
 import {
   buildEquity,
   buildMarket,
+  convRate,
   dayFloor,
   findOversell,
   isOpening,
@@ -667,5 +669,38 @@ export async function getAnalytics(userId: string): Promise<JournalAnalytics> {
     maxDrawdown: all.maxDrawdown,
     classes: summary.byClass.map((c) => ({ label: CLASS_LABEL[c.assetClass], value: c.value, share: c.share })),
     contributors: summary.pnlByAsset,
+  };
+}
+
+/* ============================================================
+ * Perilaku trading: overtrading dan pola hoki (rupiah)
+ * ============================================================ */
+
+export type BehaviorInsights = { overtrading: OvertradingResult; luck: LuckResult; entryCount: number; closedCount: number };
+
+/**
+ * Dihitung dari jurnal milik satu pengguna (userId dari sesi). Hasilnya per pengguna, jadi JANGAN dibungkus
+ * cache bersama seperti unstable_cache tanpa userId di kuncinya.
+ */
+export async function getBehaviorInsights(userId: string): Promise<BehaviorInsights> {
+  const rows = await loadTradeRows(userId);
+  const now = Date.now();
+
+  const assets = new Map<number, AssetMeta>();
+  for (const r of rows) {
+    assets.set(r.assetId, { id: r.assetId, symbol: r.symbol, name: r.name, assetClass: r.assetClass, ccy: r.ccy });
+  }
+  const summary = summarize(rows, assets, buildMarket(rows, new Map(), []), "IDR", now);
+
+  const entries: EntryEvent[] = rows
+    .filter((r) => isOpening(r.direction, r.side))
+    .map((r) => ({ t: r.t, value: r.qty * r.price * convRate(r.ccy, "IDR", r.usdIdr) }));
+  const closed: ClosedEvent[] = summary.closed.map((c) => ({ t: c.t, pnl: c.pnl, pnlPct: c.pnlPct }));
+
+  return {
+    overtrading: analyzeOvertrading(entries, closed, now),
+    luck: analyzeLuck(closed),
+    entryCount: entries.length,
+    closedCount: closed.length,
   };
 }

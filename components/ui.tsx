@@ -12,7 +12,7 @@ export function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`skeleton ${className}`} aria-hidden />;
 }
 
-export function Brand({ compact = false }: { compact?: boolean }) {
+export function Brand({ compact = false, iconOnlyLg = false }: { compact?: boolean; iconOnlyLg?: boolean }) {
   return (
     <div className="flex items-center gap-3">
       <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden>
@@ -33,7 +33,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
           );
         })}
       </svg>
-      <span className={`whitespace-nowrap text-xl font-medium tracking-tight ${compact ? "hidden sm:inline" : ""}`}>Lumen Invest</span>
+      <span className={`whitespace-nowrap text-xl font-medium tracking-tight ${compact ? "hidden sm:inline" : ""} ${iconOnlyLg ? "lg:sr-only" : ""}`}>Lumen Invest</span>
     </div>
   );
 }

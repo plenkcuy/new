@@ -90,7 +90,7 @@ export function safeNext(value: string | null | undefined, fallback = "/dashboar
 export const MARKET_MAX_AGE_MS = { delayed: 15 * 60 * 1000, realtime: 5 * 60 * 1000 } as const;
 
 export const FEATURE_MIN_TIER = {
-  "ai-insights": "premium",
+  "behavior-insights": "premium",
   "advanced-analytics": "premium",
   "futures-sentiment": "premium",
   "export-csv": "premium",
@@ -156,7 +156,7 @@ export function getPlanComparison(): ComparisonRow[] {
       free: free.calendarMonths === null ? "Semua" : `${free.calendarMonths} bulan`,
       premium: premium.calendarMonths === null ? "Semua" : `${premium.calendarMonths} bulan`,
     },
-    { label: "Insight AI", free: flag("ai-insights"), premium: yes },
+    { label: "Deteksi overtrading dan pola hoki", free: flag("behavior-insights"), premium: yes },
     { label: "Analisis lanjutan", free: flag("advanced-analytics"), premium: yes },
     { label: "Futures Sentiment", free: flag("futures-sentiment"), premium: yes },
     { label: "Ekspor portofolio (CSV)", free: flag("export-csv"), premium: yes },

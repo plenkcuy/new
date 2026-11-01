@@ -1,14 +1,15 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { AssetIcon } from "@/components/asset-icon";
 import { FitText } from "@/components/fit-text";
 import { PageHeader, UpgradeCard } from "@/components/ui";
 import { MARKET_MAX_AGE_MS, can, limitsFor } from "@/lib/access";
-import { latestBiases } from "@/lib/futures/store";
 import { getPortfolio } from "@/lib/journal";
 import { RANGE_DAYS, convRate } from "@/lib/journal-calc";
 import { getWatchlistData } from "@/lib/market-lists";
 import { CLASS_COLOR, compactIdr, idr, isRange, num, pct, quantity, type LivePosition, type ScreenProps } from "@/lib/shared";
+import { BehaviorCard, BehaviorSkeleton } from "./behavior-card";
 import { PerformanceChart, Watchlist } from "./dashboard-widgets";
 
 export async function DashboardScreen({ user, query }: ScreenProps) {
@@ -63,13 +64,15 @@ export async function DashboardScreen({ user, query }: ScreenProps) {
       <div className="grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-[1fr_1.05fr_1fr]">
         <div className="flex min-w-0 flex-col gap-6">
           <TotalHolding value={portfolio.totals.value} unrealizedPct={portfolio.totals.unrealizedPct} hasTrades={portfolio.totalTrades > 0} />
-          {can(user.tier, "ai-insights") ? (
-            <AiInsights userId={user.id} />
+          {can(user.tier, "behavior-insights") ? (
+            <Suspense fallback={<BehaviorSkeleton />}>
+              <BehaviorCard userId={user.id} />
+            </Suspense>
           ) : (
             <UpgradeCard
               glow
-              title="Insight AI"
-              description="Rekomendasi dan ringkasan berbasis AI untuk portofoliomu tersedia di paket Premium."
+              title="Cek Perilaku Trading"
+              description="Deteksi overtrading dan pola hoki dari jurnalmu tersedia di paket Premium."
               from="/dashboard"
               className="min-h-[230px] flex-1"
             />
@@ -119,58 +122,6 @@ function TotalHolding({ value, unrealizedPct, hasTrades }: { value: number; unre
           </div>
         )}
       </div>
-    </section>
-  );
-}
-
-/** Hanya dirender untuk tier yang memiliki fitur "ai-insights". */
-async function AiInsights({ userId }: { userId: string }) {
-  const biases = await latestBiases(userId);
-  const filled = biases.length > 0;
-
-  return (
-    <section
-      className="card-glow relative flex flex-col items-center justify-between px-6 pb-6 pt-7 text-center"
-      style={{ minHeight: 230 }}
-    >
-      <div>
-        <h2 className="text-xl">Keputusan Berbasis Data</h2>
-        {filled ? (
-          <>
-            <div className="mt-5 flex flex-wrap justify-center gap-3">
-              {biases.map((b) => (
-                <span
-                  key={b.symbol}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-medium leading-none"
-                >
-                  {b.label}
-                  <span className={b.bias === "LONG" ? "up" : b.bias === "SHORT" ? "down" : "text-[var(--muted)]"}>{b.bias}</span>
-                </span>
-              ))}
-            </div>
-            <p className="mx-auto mt-4 max-w-[300px] text-sm leading-relaxed text-[var(--muted)]">
-              Sentimen futures terakhir dari konfluensi derivatif dan teknikal harian.
-            </p>
-          </>
-        ) : (
-          <p className="mx-auto mt-3 max-w-[300px] text-sm leading-relaxed text-[var(--muted)]">
-            Tinggalkan tebak-tebakan. Dapatkan insight berbasis AI yang disesuaikan dengan strategi investasimu.
-          </p>
-        )}
-      </div>
-
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
-        style={{ background: "radial-gradient(60% 100% at 50% 100%, rgba(94,234,212,0.4), transparent 70%)" }}
-      />
-
-      <Link
-        href={filled ? "/futures" : "/analysis"}
-        className="btn btn-primary relative z-10 mt-8 shadow-[0_0_40px_rgba(45,212,191,0.45)]"
-      >
-        {filled ? "Buka Futures Sentiment" : "Jelajahi Insight AI"}
-      </Link>
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { after } from "next/server";
 import { TIER_LIMITS } from "./access";
 import { db } from "./db";
@@ -25,6 +26,9 @@ import {
  */
 
 export const DEFAULT_MAX_AGE_MS = 5 * 60 * 1000;
+/** Data pasar bersifat publik dan sama untuk semua pengguna, jadi aman disimpan di cache bersama. Jangan pernah memasukkan data per pengguna ke cache ini. */
+const MARKET_TAG = "market-lists";
+const CACHE_SECONDS = 5 * 60;
 const LOCK_SECONDS = 25;
 const FAILURE_BACKOFF_SECONDS = 120;
 
@@ -142,6 +146,11 @@ export async function refreshList(market: Market, list: string): Promise<Refresh
     }
 
     await markFetched(market, refreshed, result.via);
+    try {
+      revalidateTag(MARKET_TAG);
+    } catch {
+      // Dipanggil saat render halaman: cache menyusul kedaluwarsa sendiri dalam 5 menit.
+    }
     return { ok: true, via: result.via, error: null };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "gagal";
@@ -202,6 +211,26 @@ type Row = {
   extra: { icon?: string | null; capLabel?: string | null; change7d?: number | null; value?: string; group?: string | null } | null;
 };
 
+type StoredState = { market: Market; list_key: string; fetched: string | null; last_error: string | null };
+type StoredPayload = { states: StoredState[]; rows: Row[] };
+
+async function readStored(keys: string[]): Promise<StoredPayload> {
+  const [states, rows] = await Promise.all([
+    db()`
+      select market, list_key, (extract(epoch from fetched_at) * 1000)::bigint::text as fetched, last_error
+      from market_list_state
+      where (market || ':' || list_key) = any(${keys}::text[])`,
+    db()`
+      select market, list_key, rank, symbol, name, price::text as price, change_pct::text as change_pct, extra
+      from market_lists
+      where (market || ':' || list_key) = any(${keys}::text[])
+      order by market, list_key, rank`,
+  ]);
+  return { states: states as StoredState[], rows: rows as Row[] };
+}
+
+const readStoredCached = unstable_cache(readStored, ["market-stored-v1"], { revalidate: CACHE_SECONDS, tags: [MARKET_TAG] });
+
 /**
  * Membaca daftar dari database. `overview` boleh diminta lewat list "overview".
  * Daftar yang belum pernah ada ditunggu scrapernya paling lama `waitMs`, yang basi diperbarui di belakang.
@@ -214,25 +243,37 @@ export async function loadLists(
   const waitMs = opts.waitMs ?? 6000;
 
   const wanted = [...new Map(requests.map((r) => [stateKey(r.market, r.list), r])).values()];
-  const keys = wanted.map((r) => stateKey(r.market, r.list));
+  const ownerOf = (r: ListRequest): ListRequest => (r.list === "overview" ? { market: r.market, list: OVERVIEW_OWNER[r.market] } : r);
+  const keys = [...new Set(wanted.flatMap((r) => [stateKey(r.market, r.list), stateKey(ownerOf(r).market, ownerOf(r).list)]))].sort();
 
-  const states = await db()`
-    select market, list_key, (extract(epoch from fetched_at) * 1000)::bigint::text as fetched
-    from market_list_state
-    where (market || ':' || list_key) = any(${keys}::text[])`;
-  const fetchedAt = new Map<string, number | null>(
-    states.map((s) => [stateKey(s.market, s.list_key), s.fetched ? Number(s.fetched) : null]),
-  );
+  const fetchedMap = (data: StoredPayload) =>
+    new Map<string, number | null>(data.states.map((s) => [stateKey(s.market, s.list_key), s.fetched ? Number(s.fetched) : null]));
+  // Ringkasan (overview) ikut waktu pembaruan daftar pemiliknya bila barisnya sendiri belum ada.
+  const fetchedOf = (at: Map<string, number | null>, r: ListRequest) =>
+    at.get(stateKey(r.market, r.list)) ?? (r.list === "overview" ? (at.get(stateKey(ownerOf(r).market, ownerOf(r).list)) ?? null) : null);
 
-  const now = Date.now();
-  const missing = new Map<string, ListRequest>();
-  const stale = new Map<string, ListRequest>();
-  for (const r of wanted) {
-    const target = r.list === "overview" ? { market: r.market, list: OVERVIEW_OWNER[r.market] } : r;
-    const at = fetchedAt.get(stateKey(r.market, r.list)) ?? null;
-    const id = stateKey(target.market, target.list);
-    if (at === null) missing.set(id, target);
-    else if (now - at > maxAge) stale.set(id, target);
+  const classify = (data: StoredPayload) => {
+    const at = fetchedMap(data);
+    const now = Date.now();
+    const missing = new Map<string, ListRequest>();
+    const stale = new Map<string, ListRequest>();
+    for (const r of wanted) {
+      const target = ownerOf(r);
+      const fetched = fetchedOf(at, r);
+      const id = stateKey(target.market, target.list);
+      if (fetched === null) missing.set(id, target);
+      else if (now - fetched > maxAge) stale.set(id, target);
+    }
+    return { missing, stale };
+  };
+
+  // Bacaan pertama lewat cache bersama (5 menit). Kalau kelihatan ada yang kosong, pastikan lewat bacaan langsung
+  // supaya data yang baru masuk tidak tertahan oleh cache.
+  let stored = await readStoredCached(keys);
+  let { missing, stale } = classify(stored);
+  if (missing.size > 0) {
+    stored = await readStored(keys);
+    ({ missing, stale } = classify(stored));
   }
 
   if (missing.size > 0) {
@@ -240,32 +281,22 @@ export async function loadLists(
     const finished = await withTimeout(jobs.then(() => true), waitMs, false);
     // Di Vercel proses berhenti saat respons terkirim, jadi scrape yang belum selesai dilanjutkan lewat after().
     if (!finished) defer(() => jobs);
+    stored = await readStored(keys);
   }
   for (const [id, target] of stale) {
     if (!missing.has(id)) defer(() => refreshList(target.market, target.list));
   }
 
-  const rows = (await db()`
-    select market, list_key, rank, symbol, name, price::text as price, change_pct::text as change_pct, extra
-    from market_lists
-    where (market || ':' || list_key) = any(${keys}::text[])
-    order by market, list_key, rank`) as Row[];
-
-  const latest = await db()`
-    select market, list_key, (extract(epoch from fetched_at) * 1000)::bigint::text as fetched, last_error
-    from market_list_state
-    where (market || ':' || list_key) = any(${keys}::text[])`;
-  const freshAt = new Map<string, number | null>(
-    latest.map((s) => [stateKey(s.market, s.list_key), s.fetched ? Number(s.fetched) : null]),
-  );
-  const failedAt = new Set(latest.filter((s) => s.last_error).map((s) => stateKey(s.market, s.list_key)));
+  const freshAt = fetchedMap(stored);
+  const failedAt = new Set(stored.states.filter((s) => s.last_error).map((s) => stateKey(s.market, s.list_key)));
+  const rows = stored.rows;
 
   const result = new Map<string, StoredList>();
   for (const r of wanted) {
     result.set(stateKey(r.market, r.list), {
       items: [],
       overview: [],
-      fetchedAt: freshAt.get(stateKey(r.market, r.list)) ?? null,
+      fetchedAt: fetchedOf(freshAt, r),
       failed: failedAt.has(stateKey(r.market, r.list)),
     });
   }

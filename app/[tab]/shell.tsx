@@ -15,6 +15,8 @@ import {
   Lock,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   ShieldCheck,
   X,
@@ -69,18 +71,25 @@ const SIDEBAR_ID = "sidebar";
 function Sidebar({
   tier,
   open,
+  collapsed,
+  onToggleCollapse,
   onClose,
   panelRef,
   closeRef,
 }: {
   tier: Tier;
   open: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onClose: (returnFocus: boolean) => void;
   panelRef: React.Ref<HTMLDivElement>;
   closeRef: React.Ref<HTMLButtonElement>;
 }) {
   const pathname = usePathname();
   const groups = hasTier(tier, "admin") ? [...NAV_GROUPS, NAV_ADMIN] : NAV_GROUPS;
+  // Mode ikon hanya berlaku di desktop. Di layar kecil drawer selalu penuh.
+  const rail = collapsed ? "lg:justify-center lg:px-0" : "";
+  const hideLabel = collapsed ? "lg:sr-only" : "";
 
   const renderItem = (item: NavItem) => {
     const required = requiredTierFor(item.href);
@@ -93,17 +102,22 @@ function Sidebar({
         <Link
           // Menu terkunci langsung menuju halaman upgrade (tanpa redirect tambahan).
           href={locked ? deniedRedirect(required, item.href) : item.href}
-          className="nav-item"
+          className={`nav-item relative ${rail}`}
           data-active={active}
+          data-rail={collapsed}
+          data-tip={locked ? `${item.label} (Pro)` : item.label}
           aria-current={active ? "page" : undefined}
           onClick={() => onClose(false)}
         >
           <Icon size={20} strokeWidth={1.6} aria-hidden />
-          <span>{item.label}</span>
+          <span className={hideLabel}>{item.label}</span>
           {locked && (
-            <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)]">
-              <Lock size={12} aria-hidden /> PRO
-            </span>
+            <>
+              <span className={`ml-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] ${hideLabel}`}>
+                <Lock size={12} aria-hidden /> PRO
+              </span>
+              {collapsed && <Lock size={11} aria-hidden className="absolute right-2 top-2 hidden text-[var(--accent)] lg:block" />}
+            </>
           )}
         </Link>
       </li>
@@ -121,13 +135,13 @@ function Sidebar({
         "card fixed inset-y-3 left-3 z-50 flex w-[280px] max-w-[85vw] flex-col overflow-y-auto p-4",
         "transition-[transform,visibility] duration-300 ease-out",
         open ? "visible translate-x-0" : "invisible -translate-x-[115%]",
-        "lg:visible lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0",
+        "lg:visible lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:overflow-visible",
       ].join(" ")}
     >
       <nav aria-label="Navigasi utama" className="flex flex-col">
-        <div className="flex items-center justify-between px-3 pb-8 pt-4">
+        <div className={`flex items-center justify-between px-3 pb-8 pt-4 ${collapsed ? "lg:justify-center lg:px-0" : ""}`}>
           <Link href="/dashboard" aria-label="Lumen Invest, ke dashboard" className="rounded-xl" onClick={() => onClose(false)}>
-            <Brand />
+            <Brand iconOnlyLg={collapsed} />
           </Link>
           <button
             ref={closeRef}
@@ -141,9 +155,10 @@ function Sidebar({
         </div>
 
         <div className="flex flex-col gap-6">
-          {groups.map((group) => (
+          {groups.map((group, index) => (
             <div key={group.id}>
-              <p id={`nav-${group.id}`} className="nav-group-label">
+              {index > 0 && collapsed && <div aria-hidden className="mb-6 hidden h-px bg-white/10 lg:block" />}
+              <p id={`nav-${group.id}`} className={`nav-group-label ${hideLabel}`}>
                 {group.label}
               </p>
               <ul aria-labelledby={`nav-${group.id}`} className="mt-2 flex flex-col gap-1.5">
@@ -155,7 +170,23 @@ function Sidebar({
       </nav>
 
       <nav aria-label="Pengaturan dan bantuan" className="mt-auto pb-2 pt-6">
-        <ul className="flex flex-col gap-1">{NAV_FOOTER.map(renderItem)}</ul>
+        <ul className="flex flex-col gap-1">
+          <li className="hidden lg:block">
+            <button
+              type="button"
+              className={`nav-item relative ${rail}`}
+              data-rail={collapsed}
+              data-tip={collapsed ? "Lebarkan menu" : "Perkecil menu"}
+              aria-expanded={!collapsed}
+              aria-controls={SIDEBAR_ID}
+              onClick={onToggleCollapse}
+            >
+              {collapsed ? <PanelLeftOpen size={20} strokeWidth={1.6} aria-hidden /> : <PanelLeftClose size={20} strokeWidth={1.6} aria-hidden />}
+              <span className={hideLabel}>{collapsed ? "Lebarkan menu" : "Perkecil menu"}</span>
+            </button>
+          </li>
+          {NAV_FOOTER.map(renderItem)}
+        </ul>
       </nav>
     </div>
   );
@@ -196,8 +227,19 @@ function UserMenu({ user }: { user: SessionUser }) {
   );
 }
 
-export function AppShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
+const SIDEBAR_COOKIE = "lumen_sidebar";
+
+export function AppShell({
+  user,
+  children,
+  defaultCollapsed = false,
+}: {
+  user: SessionUser;
+  children: React.ReactNode;
+  defaultCollapsed?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const menuRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -207,6 +249,14 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
     restoreFocus.current = returnFocus;
     setOpen(false);
   }, []);
+
+  // Pilihan disimpan di cookie (bukan localStorage) supaya server bisa merender lebar yang benar sejak paint pertama.
+  const toggleCollapse = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${SIDEBAR_COOKIE}=${next ? "1" : "0"}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+  };
 
   // Drawer terbuka: fokus pindah ke tombol tutup. Saat ditutup lewat Esc atau tombol tutup, fokus kembali ke tombol menu.
   useEffect(() => {
@@ -236,8 +286,9 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
         return;
       }
       if (e.key !== "Tab") return;
-      const nodes = panelRef.current?.querySelectorAll<HTMLElement>("a[href], button:not([disabled])");
-      if (!nodes || !nodes.length) return;
+      const found = panelRef.current?.querySelectorAll<HTMLElement>("a[href], button:not([disabled])");
+      const nodes = found ? Array.from(found).filter((n) => n.getClientRects().length > 0) : [];
+      if (!nodes.length) return;
       const first = nodes[0];
       const last = nodes[nodes.length - 1];
       if (e.shiftKey && document.activeElement === first) {
@@ -274,10 +325,21 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
 
       {/* Jangan pakai backdrop-filter di pembungkus ini: itu membuat elemen `fixed`
           (drawer) berpatokan ke pembungkus, bukan ke layar. */}
-      <div className="grid gap-6 rounded-[32px] border border-white/5 bg-white/[0.04] p-3 sm:p-6 lg:grid-cols-[250px_1fr]">
+      <div
+        className="grid gap-6 rounded-[32px] border border-white/5 bg-white/[0.04] p-3 sm:p-6 lg:grid-cols-[var(--sb)_1fr] lg:transition-[grid-template-columns] lg:duration-300"
+        style={{ "--sb": collapsed ? "84px" : "250px" } as React.CSSProperties}
+      >
         {open && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => close(true)} aria-hidden />}
 
-        <Sidebar tier={user.tier} open={open} onClose={close} panelRef={panelRef} closeRef={closeRef} />
+        <Sidebar
+          tier={user.tier}
+          open={open}
+          collapsed={collapsed}
+          onToggleCollapse={toggleCollapse}
+          onClose={close}
+          panelRef={panelRef}
+          closeRef={closeRef}
+        />
 
         <div className="relative flex min-w-0 flex-col gap-6">
           {/* Mobile: baris atas biasa. Desktop: menu pengguna melayang di kanan atas. */}

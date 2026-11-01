@@ -91,9 +91,9 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
   const dayLabel = (key: string | undefined) => (key ? Number(key.slice(8)) : null);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {/* Ringkasan bulan */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-6">
         <div className="card relative col-span-2 min-w-0 overflow-hidden p-4 sm:col-span-1 sm:p-5">
           <div className="absolute right-0 top-0 h-16 w-16 rounded-bl-[100%] bg-teal-500/10" aria-hidden />
           <span className="text-xs text-[var(--muted)]">Net PnL</span>
@@ -160,8 +160,9 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
         </div>
       </div>
 
+      <div className="grid items-start gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
       {/* Kalender */}
-      <section className="card p-3 sm:p-6">
+      <section className="card p-3 sm:p-6 lg:p-8">
         <div className="mb-4 flex items-center justify-between sm:mb-5 sm:px-1">
           <button type="button" className="icon-btn" aria-label="Bulan sebelumnya" disabled={!canPrev} onClick={() => goTo(shift(month, -1))}>
             <ChevronLeft size={16} />
@@ -174,20 +175,20 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
           </button>
         </div>
 
-        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase tracking-wider text-[var(--muted)] sm:mb-3 sm:gap-2 sm:text-xs">
+        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase tracking-wider text-[var(--muted)] sm:mb-3 sm:gap-2 sm:text-xs lg:gap-3 lg:text-sm">
           {WEEKDAYS.map((d) => (
             <div key={d}>{d}</div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1 sm:gap-2" role="grid" aria-label={`Kalender PnL ${MONTHS[monthNumber - 1]} ${year}`}>
+        <div className="grid grid-cols-7 gap-1 sm:gap-2 lg:gap-3" role="group" aria-label={`Kalender PnL ${MONTHS[monthNumber - 1]} ${year}`}>
           {Array.from({ length: firstWeekday }, (_, i) => (
             <div
               key={`p${i}`}
-              className="flex aspect-square items-center justify-center rounded-2xl border border-white/[0.02] bg-white/[0.01] opacity-30"
+              className="flex aspect-square lg:aspect-auto lg:min-h-[92px] xl:min-h-[104px] items-center justify-center rounded-2xl border border-white/[0.02] bg-white/[0.01]"
               aria-hidden
             >
-              <span className="text-[11px] text-[var(--muted)]">{prevMonthDays - firstWeekday + i + 1}</span>
+              <span className="text-[11px] text-[#7b889a] lg:text-sm">{prevMonthDays - firstWeekday + i + 1}</span>
             </div>
           ))}
 
@@ -216,24 +217,29 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
               <button
                 key={key}
                 type="button"
-                role="gridcell"
+                aria-current={isToday ? "date" : undefined}
                 aria-label={`${longDate(key)}${pnl !== 0 ? `, ${minus(money(pnl, report))}` : ""}`}
                 aria-pressed={isSelected}
                 onClick={() => setSelected(isSelected ? null : key)}
-                className={`relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-2xl border transition active:scale-90 ${box} ${
+                className={`relative flex aspect-square lg:aspect-auto lg:min-h-[92px] xl:min-h-[104px] flex-col items-center justify-center overflow-hidden rounded-2xl border transition active:scale-90 ${box} ${
                   isSelected ? "ring-2 ring-[var(--accent)]" : ""
                 }`}
               >
                 {isToday && (
                   <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-white shadow-[0_0_5px_white]" aria-hidden />
                 )}
-                <span className={`absolute left-1.5 top-1 text-[11px] font-bold ${dateColor}`}>{d}</span>
+                <span className={`absolute left-1.5 top-1 text-[11px] font-bold lg:left-3 lg:top-2 lg:text-sm ${dateColor}`}>{d}</span>
                 {pnl !== 0 ? (
-                  <span className={`mt-2 block w-full px-0.5 font-extrabold tracking-tight ${text}`}>
-                    <FitText max={12} min={6} className="text-center">
-                      {compactMoney(pnl, report)}
-                    </FitText>
-                  </span>
+                  <>
+                    <span className={`mt-2 block w-full px-0.5 font-extrabold tracking-tight ${text}`}>
+                      <FitText max={16} min={6} className="text-center">
+                        {compactMoney(pnl, report)}
+                      </FitText>
+                    </span>
+                    {day && day.trades.length > 0 && (
+                      <span className="mt-1 hidden text-xs text-[var(--muted)] lg:block">{num(day.trades.length)} transaksi</span>
+                    )}
+                  </>
                 ) : (
                   day && day.buys > 0 && <span className="mt-2 h-1.5 w-1.5 rounded-full bg-teal-400/60" aria-hidden />
                 )}
@@ -244,10 +250,10 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
           {Array.from({ length: trailing }, (_, i) => (
             <div
               key={`n${i}`}
-              className="flex aspect-square items-center justify-center rounded-2xl border border-white/[0.02] bg-white/[0.01] opacity-30"
+              className="flex aspect-square lg:aspect-auto lg:min-h-[92px] xl:min-h-[104px] items-center justify-center rounded-2xl border border-white/[0.02] bg-white/[0.01]"
               aria-hidden
             >
-              <span className="text-[11px] text-[var(--muted)]">{i + 1}</span>
+              <span className="text-[11px] text-[#7b889a] lg:text-sm">{i + 1}</span>
             </div>
           ))}
         </div>
@@ -260,7 +266,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
       </section>
 
       {/* Detail hari */}
-      <section className="card p-6" aria-live="polite">
+      <section className="card p-6 2xl:sticky 2xl:top-6" aria-live="polite">
         {!selected ? (
           <p className="text-sm text-[var(--muted)]">
             Ketuk tanggal untuk melihat rincian transaksi. Titik kecil berarti ada transaksi beli di hari itu. Hasil dihitung dari transaksi jual dan memakai tanggal WIB.
@@ -308,6 +314,7 @@ export function CalendarView({ days, report, todayKey, minMonth, maxMonth, limit
           </>
         )}
       </section>
+      </div>
     </div>
   );
 }

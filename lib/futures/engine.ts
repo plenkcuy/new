@@ -159,3 +159,13 @@ export function decide(groups: Groups): { bias: Bias; reason: string } {
     reason: `Tren ${side} didukung ${agree.join(" serta ")}.`,
   };
 }
+
+/** Keyakinan sinyal 0 sampai 1: seberapa banyak kelompok teknikal dan skor derivatif yang searah dengan bias. */
+export function conviction(bias: Bias, groups: Groups | null, derivativeTotal: number | null): number {
+  if (bias === "NETRAL") return 0;
+  const dir = bias === "LONG" ? 1 : -1;
+  const agree = groups ? [groups.tren, groups.momentum, groups.volume].filter((v) => v === dir).length : 0;
+  const d = derivativeTotal === null ? null : Math.min(1, Math.max(0, (derivativeTotal * dir) / 4));
+  if (!groups) return d ?? 0;
+  return d === null ? agree / 3 : 0.6 * (agree / 3) + 0.4 * d;
+}

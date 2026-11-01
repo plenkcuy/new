@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { AppShell } from "./shell";
 import { requireSession } from "@/lib/auth";
 
@@ -8,5 +9,10 @@ import { requireSession } from "@/lib/auth";
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user } = await requireSession();
-  return <AppShell user={user}>{children}</AppShell>;
+  const collapsed = (await cookies()).get("lumen_sidebar")?.value === "1";
+  return (
+    <AppShell user={user} defaultCollapsed={collapsed}>
+      {children}
+    </AppShell>
+  );
 }
