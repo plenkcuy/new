@@ -15,7 +15,7 @@ import {
   type Catalog,
   type Venue,
 } from "@/lib/futures/symbols";
-import { chartDoc, tvLink } from "@/lib/futures/tradingview";
+import { chartUrl, tvLink } from "@/lib/futures/tradingview";
 import { Skeleton } from "@/components/ui";
 import { pct, unitPrice } from "@/lib/shared";
 
@@ -143,17 +143,35 @@ function GroupRow({ label, vote, detail }: { label: string; vote: Vote; detail: 
 }
 
 function TradingViewChart({ symbol, venue }: { symbol: string; venue: Venue }) {
-  const doc = useMemo(() => chartDoc(symbol, venue), [symbol, venue]);
+  const url = useMemo(() => chartUrl(symbol, venue), [symbol, venue]);
+  const [loaded, setLoaded] = useState(false);
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    setSlow(false);
+    const timer = setTimeout(() => setSlow(true), 12_000);
+    return () => clearTimeout(timer);
+  }, [url]);
+
   return (
-    <iframe
-      key={`${symbol}:${venue}`}
-      title={`Chart TradingView ${symbol} ${VENUE_LABEL[venue]}`}
-      srcDoc={doc}
-      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-      referrerPolicy="no-referrer"
-      loading="lazy"
-      className="h-[300px] w-full rounded-2xl border border-[var(--line)] sm:h-[400px]"
-    />
+    <div className="relative h-[300px] w-full sm:h-[400px]">
+      <iframe
+        key={url}
+        title={`Chart TradingView ${symbol} ${VENUE_LABEL[venue]}`}
+        src={url}
+        // Lintas origin, jadi allow-same-origin hanya memberi widget origin miliknya sendiri (bukan origin Lumen).
+        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+        referrerPolicy="strict-origin-when-cross-origin"
+        onLoad={() => setLoaded(true)}
+        className="h-full w-full rounded-2xl border border-[var(--line)]"
+      />
+      {!loaded && (
+        <div role="status" className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-[var(--muted)]">
+          {slow ? "Chart belum tampil? Cek koneksi atau pemblokir iklan, atau buka lewat tautan TradingView di atas." : "Memuat chart TradingView..."}
+        </div>
+      )}
+    </div>
   );
 }
 

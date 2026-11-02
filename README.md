@@ -127,6 +127,17 @@ Mengacu pada WCAG 2.2 AA, WAI-ARIA Authoring Practices (landmark dan navigasi), 
 - `prefers-reduced-motion` dihormati. Perpindahan halaman menampilkan skeleton (`app/[tab]/loading.tsx`), bukan layar kosong.
 - Angka memakai `tabular-nums` agar kolom rata.
 
+## Jurnal: pencarian kode aset dan harga sekarang
+
+- Kolom kode aset di form Catat Transaksi adalah kolom pencarian untuk Saham IDX, Saham US, dan Crypto. Saran datang dari aset yang pernah kamu catat, daftar Pasar yang sudah di-scrape, dan katalog pasangan USDT Binance Spot. Kode yang belum ada di daftar tetap bisa dipakai lewat opsi "Cek kode ini", yang memeriksanya ke sumber harga. Meme coin tetap diisi manual karena butuh alamat kontrak.
+- Harga bisa mengikuti harga sekarang atau diisi manual. Sumbernya scraper yang sudah ada: Pluang untuk IDX (cadangan Stockbit, lewat `lib/scrapers/stockbit.ts`), Reku untuk saham US, dan Binance untuk crypto. Kalau sumber gagal, form beralih ke manual dan menyampaikannya.
+- Nama aset dari sumber ikut tersimpan (kolom `assetName`), dengan fallback ke kode.
+- Keamanan, mengikuti pola combobox WAI-ARIA dan OWASP API Security Top 10:
+  - Endpoint `/api/assets/search` dan `/api/assets/quote` butuh login, dibatasi per pengguna (40 pencarian dan 20 cek harga per menit, balasan 429 dengan Retry-After), dan hasilnya `Cache-Control: private, no-store`.
+  - Kelas aset dicocokkan dengan allowlist dan kode dengan aturan form jurnal sebelum dipakai membentuk URL scraper, jadi permintaan keluar hanya ke host tetap (SSRF). Pembatas ini disimpan di memori instance, sebagai perlindungan sebisanya di serverless.
+  - Hasil scraper diperlakukan seperti input pengguna: nama dibersihkan dari karakter kontrol dan tanda kurung sudut, panjangnya dibatasi, dan simbol yang dialihkan oleh situs sumber ditolak.
+  - Aset yang pernah dipakai dibaca per pengguna dan tidak pernah masuk cache bersama. Hanya katalog Binance (data publik) yang di-cache 6 jam.
+
 ## Futures Sentiment: tampilan dan memecoin
 
 - Satu koin aktif ditampilkan penuh: chart TradingView di atas, lalu keputusan, keyakinan sinyal, dan detail analisis yang bisa dibuka. Koin lain tinggal dipilih dari deretan chip.
@@ -156,7 +167,7 @@ Dihitung dari jurnal milik pengguna sendiri di `lib/behavior.ts`, per pengguna d
   - Input pencarian dinormalisasi lalu dicocokkan dengan allowlist `^[A-Z0-9]{1,15}USDT$`; hanya simbol yang ada di daftar Binance yang dikirim ke API.
   - Data dari localStorage tidak dipercaya: divalidasi bentuknya saat dibaca, ditolak kalau rusak atau lebih tua dari 24 jam. Yang disimpan hanya data pasar publik dan daftar koin, tanpa token atau data akun.
   - Tidak ada `innerHTML` atau `dangerouslySetInnerHTML`; semua teks lewat React.
-  - TradingView dimuat di iframe `sandbox` (tanpa `allow-same-origin`), jadi skripnya tidak bisa menyentuh halaman atau cookie Lumen. Konfigurasinya di-escape sebelum masuk ke dokumen iframe.
+  - TradingView dimuat sebagai iframe lintas origin langsung ke URL embed resminya (`https://s.tradingview.com/embed-widget/advanced-chart/`), dengan `sandbox` yang mengizinkan skrip, popup, dan origin miliknya sendiri. Widget tidak bisa menyentuh halaman atau cookie Lumen. Jangan dibungkus iframe `srcdoc` ber-sandbox tanpa `allow-same-origin`: sandbox diwariskan ke iframe di dalamnya, widget mendapat origin buntu, tidak bisa memakai storage, dan chart jadi kosong.
   - Panggilan ke Binance memakai `credentials: omit`, tanpa referrer, host data publik `data-api.binance.vision` untuk Spot, dan berhenti sementara kalau menerima 429 atau 418.
   - Header CSP produksi (`next.config.ts`): `object-src 'none'`, `base-uri`, `form-action`, `frame-ancestors 'none'`, `frame-src` dan `connect-src` dibatasi ke TradingView dan Binance. `script-src` belum dibatasi karena butuh nonce di semua halaman.
 

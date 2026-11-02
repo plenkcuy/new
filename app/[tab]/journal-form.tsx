@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
+import { RefreshCw } from "lucide-react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 import { addTrade } from "@/lib/journal-actions";
 import { deniedRedirect } from "@/lib/access";
+import type { AssetHit } from "@/lib/asset-search";
+import { AssetCombobox } from "./asset-combobox";
 import { previewPnl, toWibInput } from "@/lib/journal-input";
 import type { CloseTarget } from "@/lib/journal";
 import {
@@ -39,6 +42,11 @@ const optNum = (raw: string) => {
 
 const minus = (text: string) => text.replace(/-/g, "\u2212");
 
+type LiveQuote = { price: number; changePct: number | null; source: string; t: number };
+const SOURCE_LABEL: Record<string, string> = { pluang: "Pluang", stockbit: "Stockbit", reku: "Reku", binance: "Binance" };
+const SEARCHABLE = ["idx", "us_stock", "crypto"] as const;
+const isSearchable = (c: AssetClass): c is (typeof SEARCHABLE)[number] => (SEARCHABLE as readonly string[]).includes(c);
+
 type Props = { used: number; limit: number | null; closeTarget?: CloseTarget | null };
 
 export function TradeForm({ used, limit, closeTarget = null }: Props) {
@@ -62,6 +70,12 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
   const [unit, setUnit] = useState<"lot" | "share">(initialUnit);
   const [qty, setQty] = useState(initialQty);
   const [price, setPrice] = useState(closeTarget ? plain(closeTarget.price) : "");
+  const [symbol, setSymbol] = useState(closeTarget?.symbol ?? "");
+  const [assetName, setAssetName] = useState("");
+  const [priceMode, setPriceMode] = useState<"live" | "manual">(closeTarget ? "manual" : "live");
+  const [liveQuote, setLiveQuote] = useState<LiveQuote | null>(null);
+  const [quoteState, setQuoteState] = useState<"idle" | "loading" | "error">("idle");
+  const quoteAbort = useRef<AbortController | null>(null);
   const [closePrice, setClosePrice] = useState("");
   const [fee, setFee] = useState("");
   const [feeClose, setFeeClose] = useState("");
@@ -70,12 +84,85 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
 
   useEffect(() => setNow(toWibInput(Date.now())), []);
 
+  // Harga sekarang untuk kode aset terpilih, lewat scraper di server (dibatasi per pengguna).
+  const fetchQuote = useCallback(
+    async (cls: AssetClass, code: string, fill: boolean) => {
+      if (!isSearchable(cls) || !code.trim()) return;
+      quoteAbort.current?.abort();
+      const controller = new AbortController();
+      quoteAbort.current = controller;
+      setQuoteState("loading");
+      try {
+        const res = await fetch(`/api/assets/quote?class=${cls}&symbol=${encodeURIComponent(code.trim().toUpperCase())}`, {
+          signal: controller.signal,
+          credentials: "same-origin",
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const json = (await res.json()) as LiveQuote & { name?: string | null };
+        if (!(json.price > 0)) throw new Error("harga kosong");
+        setLiveQuote({ price: json.price, changePct: json.changePct ?? null, source: json.source, t: json.t });
+        if (json.name) setAssetName(json.name);
+        if (fill) setPrice(plain(json.price));
+        setQuoteState("idle");
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+        setLiveQuote(null);
+        setQuoteState("error");
+        setPriceMode("manual");
+      }
+    },
+    [],
+  );
+
+  useEffect(() => () => quoteAbort.current?.abort(), []);
+
+  const pickAsset = (hit: AssetHit) => {
+    setSymbol(hit.symbol);
+    setAssetName(hit.name ?? "");
+    setLiveQuote(null);
+    setQuoteState("idle");
+    if (priceMode === "live" && hit.price) setPrice(plain(hit.price));
+    fetchQuote(assetClass, hit.symbol, priceMode === "live");
+  };
+
+  const typeSymbol = (value: string) => {
+    setSymbol(value);
+    setAssetName("");
+    setLiveQuote(null);
+    setQuoteState("idle");
+  };
+
+  const changeClass = (next: AssetClass) => {
+    if (next === assetClass) return;
+    quoteAbort.current?.abort();
+    setAssetClass(next);
+    setSymbol("");
+    setAssetName("");
+    setLiveQuote(null);
+    setQuoteState("idle");
+    setPrice("");
+    setPriceMode("live");
+  };
+
+  const choosePriceMode = (mode: "live" | "manual") => {
+    setPriceMode(mode);
+    if (mode === "live" && isSearchable(assetClass) && symbol.trim()) {
+      if (liveQuote) setPrice(plain(liveQuote.price));
+      else fetchQuote(assetClass, symbol, true);
+    }
+  };
+
   // Setelah tersimpan: kosongkan isian. Bila berasal dari tombol Tutup, kembali ke jurnal biasa.
   useEffect(() => {
     if (!state.ok) return;
     formRef.current?.reset();
     setQty("");
     setPrice("");
+    setSymbol("");
+    setAssetName("");
+    setLiveQuote(null);
+    setQuoteState("idle");
+    setPriceMode("live");
     setClosePrice("");
     setFee("");
     setFeeClose("");
@@ -88,6 +175,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
 
   const ccy: Ccy = assetClass === "idx" ? "IDR" : "USD";
   const quote = ccy === "IDR" ? "Rp" : "USD";
+  const livePrice = priceMode === "live" && Boolean(liveQuote) && isSearchable(assetClass) && !closeTarget;
   // Long dibuka dengan beli dan ditutup dengan jual. Short sebaliknya.
   const side: "buy" | "sell" = (direction === "long") === (action === "open") ? "buy" : "sell";
   const closing = closed || action === "close";
@@ -140,6 +228,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
   return (
     <form ref={formRef} onSubmit={submit} className="flex flex-col gap-5 [color-scheme:dark]" key={closeTarget?.assetId ?? "baru"}>
       <input type="hidden" name="assetClass" value={assetClass} />
+      <input type="hidden" name="assetName" value={assetName} />
       <input type="hidden" name="side" value={side} />
       <input type="hidden" name="direction" value={direction} />
       <input type="hidden" name="pnlMode" value={closing ? pnlMode : "auto"} />
@@ -157,7 +246,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
       ) : (
         <div className="flex flex-wrap gap-2">
           {ASSET_CLASSES.map((c) => (
-            <button key={c} type="button" className="pill" data-active={assetClass === c} onClick={() => setAssetClass(c)}>
+            <button key={c} type="button" className="pill" data-active={assetClass === c} onClick={() => changeClass(c)}>
               {CLASS_LABEL[c]}
             </button>
           ))}
@@ -165,24 +254,41 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div>
-          <label className={label} htmlFor="symbol">
-            Kode aset
-          </label>
-          <input
+        {isSearchable(assetClass) ? (
+          <AssetCombobox
             id="symbol"
-            name="symbol"
-            required
-            maxLength={20}
-            autoComplete="off"
-            className={field}
-            defaultValue={closeTarget?.symbol}
+            label="Kode aset"
+            className={`${field} pr-10`}
+            labelClassName={label}
+            assetClass={assetClass}
+            value={symbol}
             readOnly={Boolean(closeTarget)}
-            placeholder={
-              assetClass === "idx" ? "BBCA" : assetClass === "us_stock" ? "AAPL" : assetClass === "crypto" ? "BTC" : "BONK"
-            }
+            placeholder={assetClass === "idx" ? "BBCA" : assetClass === "us_stock" ? "AAPL" : "BTC"}
+            onChange={typeSymbol}
+            onPick={pickAsset}
+            onCommit={(value) => {
+              if (priceMode === "live" && value.trim() && !liveQuote && quoteState !== "loading") fetchQuote(assetClass, value, true);
+            }}
           />
-        </div>
+        ) : (
+          <div>
+            <label className={label} htmlFor="symbol">
+              Kode aset
+            </label>
+            <input
+              id="symbol"
+              name="symbol"
+              required
+              maxLength={20}
+              autoComplete="off"
+              className={field}
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value)}
+              readOnly={Boolean(closeTarget)}
+              placeholder="BONK"
+            />
+          </div>
+        )}
 
         <div>
           <span className={label}>Arah</span>
@@ -266,9 +372,45 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
             autoComplete="off"
             className={field}
             value={price}
+            readOnly={livePrice}
+            aria-readonly={livePrice}
             onChange={(e) => setPrice(e.target.value)}
             placeholder={assetClass === "idx" ? "9850" : "0,00001234"}
           />
+          {isSearchable(assetClass) && (
+            <div className="mt-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" className="pill !min-h-[34px] !px-4 !py-2 !text-xs" data-active={priceMode === "live"} onClick={() => choosePriceMode("live")}>
+                  Harga sekarang
+                </button>
+                <button type="button" className="pill !min-h-[34px] !px-4 !py-2 !text-xs" data-active={priceMode === "manual"} onClick={() => choosePriceMode("manual")}>
+                  Manual
+                </button>
+                {priceMode === "live" && symbol.trim() && (
+                  <button
+                    type="button"
+                    className="inline-flex size-8 items-center justify-center rounded-full border border-white/15 text-[var(--muted)] hover:text-[var(--text)]"
+                    aria-label="Perbarui harga sekarang"
+                    disabled={quoteState === "loading"}
+                    onClick={() => fetchQuote(assetClass, symbol, true)}
+                  >
+                    <RefreshCw size={14} aria-hidden className={quoteState === "loading" ? "animate-spin" : ""} />
+                  </button>
+                )}
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted)]" role="status" aria-live="polite" data-testid="price-hint">
+                {quoteState === "loading"
+                  ? "Mengambil harga sekarang..."
+                  : quoteState === "error"
+                    ? "Harga sekarang belum tersedia untuk kode ini, isi manual saja."
+                    : priceMode === "live" && liveQuote
+                      ? `Harga dari ${SOURCE_LABEL[liveQuote.source] ?? liveQuote.source}, ${new Intl.DateTimeFormat("id-ID", { timeStyle: "short", timeZone: "Asia/Jakarta" }).format(new Date(liveQuote.t))} WIB. Pilih Manual untuk mengubahnya.`
+                      : priceMode === "live"
+                        ? "Pilih kode aset untuk mengambil harga sekarang."
+                        : "Harga diisi manual."}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

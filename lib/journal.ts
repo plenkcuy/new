@@ -250,7 +250,7 @@ async function findOrCreateAsset(v: TradeFormValue): Promise<AssetRecord> {
 
   const rows = await db()`
     insert into journal_assets (asset_class, symbol, name, ccy, chain, contract_addr, price_source, price_ref)
-    values (${v.assetClass}, ${v.symbol}, ${v.symbol}, ${def.ccy}, ${v.chain}::text, ${v.contract}::text, ${def.source}, ${def.ref})
+    values (${v.assetClass}, ${v.symbol}, ${v.name ?? v.symbol}, ${def.ccy}, ${v.chain}::text, ${v.contract}::text, ${def.source}, ${def.ref})
     on conflict (asset_class, symbol, coalesce(chain, ''), coalesce(contract_addr, ''))
     do update set symbol = excluded.symbol
     returning id::text as id, symbol, price_source, price_ref, chain`;
