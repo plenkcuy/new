@@ -23,6 +23,8 @@ export const FEE_DEFAULTS: Record<AssetClass, { buy: number; sell: number }> = {
 export type TradeFormValue = {
   assetClass: AssetClass;
   symbol: string;
+  /** Nama aset dari pencarian (opsional). Bila kosong, nama memakai kode aset. */
+  name: string | null;
   chain: Chain | null;
   contract: string | null;
   /** Long dibuka dengan beli, short dibuka dengan jual. */
@@ -52,7 +54,7 @@ export type TradeFormValue = {
 
 type Parsed = { ok: true; value: TradeFormValue } | { ok: false; message: string };
 
-const SYMBOL_RULES: Record<AssetClass, RegExp> = {
+export const SYMBOL_RULES: Record<AssetClass, RegExp> = {
   idx: /^[A-Z0-9]{2,6}$/,
   us_stock: /^[A-Z.]{1,6}$/,
   crypto: /^[A-Z0-9]{2,12}$/,
@@ -106,6 +108,8 @@ export function parseTradeForm(formData: FormData): Parsed {
   const rawSymbol = text(formData, "symbol");
   const symbol = assetClass === "meme" ? rawSymbol : rawSymbol.toUpperCase();
   if (!SYMBOL_RULES[assetClass].test(symbol)) return fail("Kode aset tidak valid.");
+  // Nama berasal dari kolom tersembunyi, jadi diperlakukan sebagai input tak tepercaya.
+  const name = text(formData, "assetName").replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 80) || null;
 
   let chain: Chain | null = null;
   let contract: string | null = null;
@@ -244,6 +248,7 @@ export function parseTradeForm(formData: FormData): Parsed {
     value: {
       assetClass,
       symbol,
+      name,
       chain,
       contract,
       direction,

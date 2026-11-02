@@ -2,11 +2,12 @@ import "server-only";
 import { dexScreenerQuote, getJson, latestUsdIdrFallback, saveAssetIcons } from "./market-feed";
 import { scrapePluangPrice } from "./scrapers/pluang";
 import { scrapeRekuPrice } from "./scrapers/reku";
+import { scrapeStockbit } from "./scrapers/stockbit";
 import type { AssetClass } from "./shared";
 
 /**
  * Harga terkini per jenis aset:
- *   saham IDX  : Pluang (scraper)
+ *   saham IDX  : Pluang (scraper), cadangan Stockbit
  *   saham US   : Reku (scraper)
  *   crypto     : Binance spot REST (di browser Premium ditimpa WebSocket)
  *   meme coin  : DexScreener
@@ -16,7 +17,9 @@ import type { AssetClass } from "./shared";
 export type Quote = {
   price: number;
   changePct: number | null;
-  source: "pluang" | "reku" | "binance" | "dexscreener";
+  source: "pluang" | "stockbit" | "reku" | "binance" | "dexscreener";
+  /** Nama perusahaan bila sumbernya menyediakan. */
+  name?: string | null;
   icon: string | null;
   t: number;
 };
@@ -57,7 +60,9 @@ async function load(target: QuoteTarget): Promise<Quote | null> {
   switch (target.assetClass) {
     case "idx": {
       const q = await scrapePluangPrice(target.symbol);
-      return q && { ...q, source: "pluang", t: now };
+      if (q) return { ...q, source: "pluang", t: now };
+      const backup = await scrapeStockbit(target.symbol);
+      return backup && { price: backup.price, changePct: backup.changePct, icon: backup.icon, name: backup.name, source: "stockbit", t: now };
     }
     case "us_stock": {
       const q = await scrapeRekuPrice(target.symbol);
