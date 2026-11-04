@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "./db";
+import { dexQuoteFor, isDexChain } from "./dexscreener";
 import { DAY_MS } from "./journal-calc";
-import { safeIconUrl } from "./shared";
 
 /**
  * Sumber data harga:
@@ -47,34 +47,14 @@ async function yahooDaily(ref: string, fromMs: number): Promise<DailyClose[]> {
   return rows;
 }
 
-type DexResponse = {
-  pairs?:
-    | {
-        chainId?: string;
-        priceUsd?: string;
-        liquidity?: { usd?: number };
-        priceChange?: { h24?: number };
-        info?: { imageUrl?: string };
-      }[]
-    | null;
-};
-
-/** Harga terkini token dari pair dengan likuiditas terbesar di chain yang dipilih. */
+/** Harga terkini token dari pair likuiditas terbesar di chain yang dipilih (lihat lib/dexscreener.ts). */
 export async function dexScreenerQuote(
   chain: string,
   address: string,
 ): Promise<{ price: number; changePct: number | null; icon: string | null } | null> {
-  const data = (await getJson(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(address)}`)) as DexResponse | null;
-  const pairs = (data?.pairs ?? []).filter((p) => p.chainId === chain && Number(p.priceUsd) > 0);
-  if (pairs.length === 0) return null;
-  pairs.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
-  const best = pairs[0];
-  const change = best.priceChange?.h24;
-  return {
-    price: Number(best.priceUsd),
-    changePct: typeof change === "number" ? change : null,
-    icon: safeIconUrl(best.info?.imageUrl),
-  };
+  if (!isDexChain(chain)) return null;
+  const pair = await dexQuoteFor(chain, address);
+  return pair ? { price: pair.price, changePct: pair.changePct, icon: pair.icon } : null;
 }
 
 async function dexScreenerPrice(chain: string, address: string): Promise<number | null> {

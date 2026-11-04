@@ -20,6 +20,7 @@ import {
   money,
   type AssetClass,
   type Ccy,
+  type Chain,
   type Direction,
   type JournalFormState,
 } from "@/lib/shared";
@@ -43,8 +44,9 @@ const optNum = (raw: string) => {
 const minus = (text: string) => text.replace(/-/g, "\u2212");
 
 type LiveQuote = { price: number; changePct: number | null; source: string; t: number };
+type MemeTarget = { chain: Chain; contract: string };
 const SOURCE_LABEL: Record<string, string> = { pluang: "Pluang", stockbit: "Stockbit", reku: "Reku", binance: "Binance" };
-const SEARCHABLE = ["idx", "us_stock", "crypto"] as const;
+const SEARCHABLE = ["idx", "us_stock", "crypto", "meme"] as const;
 const isSearchable = (c: AssetClass): c is (typeof SEARCHABLE)[number] => (SEARCHABLE as readonly string[]).includes(c);
 
 type Props = { used: number; limit: number | null; closeTarget?: CloseTarget | null };
@@ -81,19 +83,27 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
   const [feeClose, setFeeClose] = useState("");
   const [pnlManual, setPnlManual] = useState("");
   const [now, setNow] = useState("");
+  const [chain, setChain] = useState<Chain>((CHAINS as readonly string[]).includes(closeTarget?.chain ?? "") ? (closeTarget?.chain as Chain) : "solana");
+  const [contract, setContract] = useState<string>(closeTarget?.contract ?? "");
+
+  // Meme coin butuh chain dan alamat kontrak untuk harga. Kosong berarti harga belum bisa diambil.
+  const memeTarget: MemeTarget | undefined = assetClass === "meme" && contract ? { chain, contract } : undefined;
 
   useEffect(() => setNow(toWibInput(Date.now())), []);
 
   // Harga sekarang untuk kode aset terpilih, lewat scraper di server (dibatasi per pengguna).
   const fetchQuote = useCallback(
-    async (cls: AssetClass, code: string, fill: boolean) => {
+    async (cls: AssetClass, code: string, fill: boolean, meme?: MemeTarget) => {
       if (!isSearchable(cls) || !code.trim()) return;
+      if (cls === "meme" && !meme) return;
       quoteAbort.current?.abort();
       const controller = new AbortController();
       quoteAbort.current = controller;
       setQuoteState("loading");
       try {
-        const res = await fetch(`/api/assets/quote?class=${cls}&symbol=${encodeURIComponent(code.trim().toUpperCase())}`, {
+        const symbolParam = cls === "meme" ? code.trim() : code.trim().toUpperCase();
+        const memeParams = meme ? `&chain=${meme.chain}&contract=${encodeURIComponent(meme.contract)}` : "";
+        const res = await fetch(`/api/assets/quote?class=${cls}&symbol=${encodeURIComponent(symbolParam)}${memeParams}`, {
           signal: controller.signal,
           credentials: "same-origin",
         });
@@ -121,8 +131,13 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
     setAssetName(hit.name ?? "");
     setLiveQuote(null);
     setQuoteState("idle");
+    const meme = hit.chain && hit.contract ? { chain: hit.chain, contract: hit.contract } : undefined;
+    if (meme) {
+      setChain(meme.chain);
+      setContract(meme.contract);
+    }
     if (priceMode === "live" && hit.price) setPrice(plain(hit.price));
-    fetchQuote(assetClass, hit.symbol, priceMode === "live");
+    fetchQuote(assetClass, hit.symbol, priceMode === "live", meme);
   };
 
   const typeSymbol = (value: string) => {
@@ -130,12 +145,15 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
     setAssetName("");
     setLiveQuote(null);
     setQuoteState("idle");
+    // Kode yang diketik ulang bisa berarti token lain, jadi alamat dari pilihan sebelumnya dikosongkan.
+    if (assetClass === "meme") setContract("");
   };
 
   const changeClass = (next: AssetClass) => {
     if (next === assetClass) return;
     quoteAbort.current?.abort();
     setAssetClass(next);
+    setContract("");
     setSymbol("");
     setAssetName("");
     setLiveQuote(null);
@@ -148,7 +166,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
     setPriceMode(mode);
     if (mode === "live" && isSearchable(assetClass) && symbol.trim()) {
       if (liveQuote) setPrice(plain(liveQuote.price));
-      else fetchQuote(assetClass, symbol, true);
+      else fetchQuote(assetClass, symbol, true, memeTarget);
     }
   };
 
@@ -170,6 +188,8 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
     setRiskStop("");
     setClosed(false);
     setPnlMode("auto");
+    setChain("solana");
+    setContract("");
     if (closeTarget) router.replace("/journal", { scroll: false });
   }, [state, closeTarget, router]);
 
@@ -263,11 +283,12 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
             assetClass={assetClass}
             value={symbol}
             readOnly={Boolean(closeTarget)}
-            placeholder={assetClass === "idx" ? "BBCA" : assetClass === "us_stock" ? "AAPL" : "BTC"}
+            placeholder={assetClass === "idx" ? "BBCA" : assetClass === "us_stock" ? "AAPL" : assetClass === "meme" ? "PEPE atau alamat kontrak" : "BTC"}
+            keepCase={assetClass === "meme"}
             onChange={typeSymbol}
             onPick={pickAsset}
             onCommit={(value) => {
-              if (priceMode === "live" && value.trim() && !liveQuote && quoteState !== "loading") fetchQuote(assetClass, value, true);
+              if (priceMode === "live" && value.trim() && !liveQuote && quoteState !== "loading") fetchQuote(assetClass, value, true, memeTarget);
             }}
           />
         ) : (
@@ -392,7 +413,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
                     className="inline-flex size-8 items-center justify-center rounded-full border border-white/15 text-[var(--muted)] hover:text-[var(--text)]"
                     aria-label="Perbarui harga sekarang"
                     disabled={quoteState === "loading"}
-                    onClick={() => fetchQuote(assetClass, symbol, true)}
+                    onClick={() => fetchQuote(assetClass, symbol, true, memeTarget)}
                   >
                     <RefreshCw size={14} aria-hidden className={quoteState === "loading" ? "animate-spin" : ""} />
                   </button>
@@ -470,7 +491,7 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
             <label className={label} htmlFor="chain">
               Chain
             </label>
-            <select id="chain" name="chain" className={field} defaultValue={closeTarget?.chain ?? "solana"} disabled={Boolean(closeTarget)}>
+            <select id="chain" name="chain" className={field} value={chain} onChange={(e) => setChain(e.target.value as Chain)} disabled={Boolean(closeTarget)}>
               {CHAINS.map((c) => (
                 <option key={c} value={c}>
                   {CHAIN_LABEL[c]}
@@ -490,7 +511,8 @@ export function TradeForm({ used, limit, closeTarget = null }: Props) {
               autoComplete="off"
               spellCheck={false}
               className={field}
-              defaultValue={closeTarget?.contract ?? undefined}
+              value={contract}
+              onChange={(e) => setContract(e.target.value.trim())}
               readOnly={Boolean(closeTarget)}
               placeholder="Salin dari DexScreener atau explorer"
             />

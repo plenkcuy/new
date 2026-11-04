@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui";
 import { pct, unitPrice } from "@/lib/shared";
 
 type Tone = "up" | "down" | "flat" | "info";
+type Density = "besar" | "sedang" | "kecil";
 
 const TONE_CLASS: Record<Tone, string> = {
   up: "bg-[color-mix(in_srgb,var(--up)_16%,transparent)] text-[var(--up)]",
@@ -31,8 +32,15 @@ const TONE_CLASS: Record<Tone, string> = {
 const WATCH_KEY = "lumen:futures:watch:v1";
 const SEARCH_KEY = "lumen:futures:search:v1";
 const CHART_KEY = "lumen:futures:chart:v1";
+const DENSITY_KEY = "lumen:futures:density:v1";
 const REFRESH_COOLDOWN_S = 10;
 const VENUE_LABEL: Record<Venue, string> = { spot: "Spot", futures: "Futures" };
+
+const DENSITIES: Density[] = ["besar", "sedang", "kecil"];
+const DENSITY_LABEL: Record<Density, string> = { besar: "Besar", sedang: "Sedang", kecil: "Kecil" };
+/** Lebar minimum kartu per ukuran. Makin banyak koin, kartu makin kecil (lihat tileMin). */
+const TILE_MIN: Record<Density, number> = { besar: 460, sedang: 360, kecil: 280 };
+const CHART_HEIGHT: Record<Density, number> = { besar: 320, sedang: 240, kecil: 180 };
 
 const BIAS_META: Record<Bias, { icon: typeof TrendingUp; tone: Tone; tip: string }> = {
   LONG: {
@@ -58,6 +66,8 @@ const pointTone = (point: number): Tone => (point > 0 ? "up" : point < 0 ? "down
 const pointLabel = (point: number) => (point > 0 ? `+${point}` : String(point));
 const convictionLabel = (c: number) => (c >= 0.67 ? "Tinggi" : c >= 0.34 ? "Sedang" : "Rendah");
 
+const isDensity = (v: unknown): v is Density => typeof v === "string" && (DENSITIES as string[]).includes(v);
+
 function readFlag(key: string, fallback: boolean): boolean {
   try {
     const raw = window.localStorage.getItem(key);
@@ -72,6 +82,15 @@ function writeFlag(key: string, value: boolean) {
     window.localStorage.setItem(key, value ? "1" : "0");
   } catch {
     return;
+  }
+}
+
+function readDensity(): Density {
+  try {
+    const raw = window.localStorage.getItem(DENSITY_KEY);
+    return isDensity(raw) ? raw : "sedang";
+  } catch {
+    return "sedang";
   }
 }
 
@@ -103,7 +122,7 @@ function heroStyle(bias: Bias, conviction: number): React.CSSProperties {
 
 function Chip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
-    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium leading-none ${TONE_CLASS[tone]}`}>
+    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium leading-none ${TONE_CLASS[tone]}`}>
       {children}
     </span>
   );
@@ -117,11 +136,11 @@ function fundingText(value: number | null) {
 
 function Row({ label, value, point, note }: { label: string; value: string; point: number; note: string }) {
   return (
-    <li className="flex items-start justify-between gap-4 py-3.5">
+    <li className="flex items-start justify-between gap-3 py-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-3">
-          <span className="text-base text-[var(--muted)]">{label}</span>
-          <span className="text-base font-medium">{value}</span>
+          <span className="text-sm text-[var(--muted)]">{label}</span>
+          <span className="text-sm font-medium">{value}</span>
         </div>
         <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">{note}</p>
       </div>
@@ -132,9 +151,9 @@ function Row({ label, value, point, note }: { label: string; value: string; poin
 
 function GroupRow({ label, vote, detail }: { label: string; vote: Vote; detail: string }) {
   return (
-    <li className="flex items-start justify-between gap-4 py-3.5">
+    <li className="flex items-start justify-between gap-3 py-3">
       <div className="min-w-0">
-        <div className="text-base font-medium">{label}</div>
+        <div className="text-sm font-medium">{label}</div>
         <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">{detail}</p>
       </div>
       <Chip tone={voteTone(vote)}>{voteLabel(vote)}</Chip>
@@ -142,7 +161,7 @@ function GroupRow({ label, vote, detail }: { label: string; vote: Vote; detail: 
   );
 }
 
-function TradingViewChart({ symbol, venue }: { symbol: string; venue: Venue }) {
+function TradingViewChart({ symbol, venue, height }: { symbol: string; venue: Venue; height: number }) {
   const url = useMemo(() => chartUrl(symbol, venue), [symbol, venue]);
   const [loaded, setLoaded] = useState(false);
   const [slow, setSlow] = useState(false);
@@ -155,7 +174,7 @@ function TradingViewChart({ symbol, venue }: { symbol: string; venue: Venue }) {
   }, [url]);
 
   return (
-    <div className="relative h-[300px] w-full sm:h-[400px]">
+    <div className="relative w-full" style={{ height }}>
       <iframe
         key={url}
         title={`Chart TradingView ${symbol} ${VENUE_LABEL[venue]}`}
@@ -175,20 +194,24 @@ function TradingViewChart({ symbol, venue }: { symbol: string; venue: Venue }) {
   );
 }
 
+/**
+ * Detail analisis. Susunan satu kolom, dan baru dua kolom bila kartunya cukup lebar (container query).
+ * Dengan begitu isinya tidak pernah melebar atau gepeng horizontal, apa pun ukuran kartunya.
+ */
 function Details({ card }: { card: FuturesCard }) {
   const { metrics, derivatives, technical } = card;
   const t = technical?.input;
   return (
-    <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-x-8 gap-y-6 @min-[42rem]:grid-cols-2">
       {derivatives ? (
-        <div>
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg">Screening derivatif</h3>
-            <span className={`text-base font-medium ${derivatives.total > 0 ? "up" : derivatives.total < 0 ? "down" : "text-[var(--muted)]"}`}>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-medium">Screening derivatif</h3>
+            <span className={`text-sm font-medium ${derivatives.total > 0 ? "up" : derivatives.total < 0 ? "down" : "text-[var(--muted)]"}`}>
               Skor {pointLabel(derivatives.total)}
             </span>
           </div>
-          <ul className="mt-2 divide-y divide-[var(--line)]">
+          <ul className="mt-1 divide-y divide-[var(--line)]">
             <Row
               label="Open Interest 24 jam"
               value={metrics.oiChange24h === null ? "Belum ada data" : pct(metrics.oiChange24h)}
@@ -213,9 +236,9 @@ function Details({ card }: { card: FuturesCard }) {
       )}
 
       {technical && t && (
-        <div>
-          <h3 className="text-lg">Konfluensi teknikal harian</h3>
-          <ul className="mt-2 divide-y divide-[var(--line)]">
+        <div className="min-w-0">
+          <h3 className="text-base font-medium">Konfluensi teknikal harian</h3>
+          <ul className="mt-1 divide-y divide-[var(--line)]">
             <GroupRow
               label="Tren"
               vote={technical.groups.tren}
@@ -238,15 +261,16 @@ function Details({ card }: { card: FuturesCard }) {
   );
 }
 
-function Hero({
+/** Satu kartu koin. Lebarnya ikut kolom grid, dan isinya menyesuaikan lewat container query. */
+function Tile({
   card,
   chartOn,
-  onChartToggle,
+  density,
   onRemove,
 }: {
   card: FuturesCard;
   chartOn: boolean;
-  onChartToggle: () => void;
+  density: Density;
   onRemove: (symbol: string) => void;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
@@ -271,125 +295,120 @@ function Hero({
   const unitNote = card.ok && card.venue === "futures" && card.multiplier > 1 ? `Harga per ${card.multiplier.toLocaleString("id-ID")} ${card.label}` : null;
 
   return (
-    <section className="card overflow-hidden" style={heroStyle(card.bias, card.conviction)} aria-label={`Analisis ${card.label}`}>
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 p-4 sm:px-6 sm:pt-6">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 className="text-2xl font-medium">{card.label}</h2>
-          <span className="text-xl tabular-nums">{card.metrics.price === null ? "Harga belum tersedia" : unitPrice(card.metrics.price, "USD")}</span>
-          {change !== null && <span className={`text-base font-medium tabular-nums ${change >= 0 ? "up" : "down"}`}>{pct(change)}</span>}
+    <article
+      className="@container flex min-w-0 flex-col gap-4 overflow-hidden rounded-[28px] border p-4 sm:p-5"
+      style={heroStyle(card.bias, card.conviction)}
+      aria-label={`Analisis ${card.label}`}
+    >
+      <header className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-medium">{card.label}</h2>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-base tabular-nums">{card.metrics.price === null ? "Harga belum tersedia" : unitPrice(card.metrics.price, "USD")}</span>
+            {change !== null && <span className={`text-sm font-medium tabular-nums ${change >= 0 ? "up" : "down"}`}>{pct(change)}</span>}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2">
           <Chip tone={meta.tone}>
-            <Icon size={16} aria-hidden /> {card.bias}
+            <Icon size={15} aria-hidden /> {card.bias}
           </Chip>
           <button
             type="button"
             aria-label={`Hapus ${card.label}`}
             onClick={() => onRemove(card.symbol)}
-            className="inline-flex size-10 items-center justify-center rounded-full border border-white/15 text-[var(--muted)] hover:text-[var(--text)]"
+            className="inline-flex size-9 items-center justify-center rounded-full border border-white/15 text-[var(--muted)] hover:text-[var(--text)]"
           >
-            <X size={16} aria-hidden />
+            <X size={15} aria-hidden />
           </button>
         </div>
       </header>
 
       {card.ok && (
-        <div className="px-3 pb-3 sm:px-4 sm:pb-4">
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            {chartOn &&
-              venues.length > 1 &&
-              venues.map((v) => (
-                <button key={v} type="button" className="pill" data-active={activeVenue === v} onClick={() => setChartVenue(v)}>
-                  {VENUE_LABEL[v]}
-                </button>
-              ))}
-            {chartOn && (
-              <a href={tvLink(chartSymbol, activeVenue)} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--accent)]">
-                Buka di TradingView
-              </a>
-            )}
-            <button type="button" className="pill ml-auto" aria-pressed={chartOn} onClick={onChartToggle}>
-              {chartOn ? "Sembunyikan chart" : "Tampilkan chart"}
-            </button>
+        <>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {venues.map((v) => (
+              <Chip key={v} tone="info">
+                {VENUE_LABEL[v]}
+              </Chip>
+            ))}
+            {source && <span className="min-w-0 text-xs leading-relaxed text-[var(--muted)]">{source}</span>}
           </div>
-          {chartOn && <TradingViewChart symbol={chartSymbol} venue={activeVenue} />}
-        </div>
+          {unitNote && <div className="-mt-2 text-xs text-[var(--muted)]">{unitNote}</div>}
+
+          {chartOn && (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {venues.length > 1 &&
+                  venues.map((v) => (
+                    <button key={v} type="button" className="pill !min-h-[32px] !px-3 !py-1.5 !text-xs" data-active={activeVenue === v} onClick={() => setChartVenue(v)}>
+                      {VENUE_LABEL[v]}
+                    </button>
+                  ))}
+                <a href={tvLink(chartSymbol, activeVenue)} target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--accent)]">
+                  Buka di TradingView
+                </a>
+              </div>
+              <TradingViewChart symbol={chartSymbol} venue={activeVenue} height={CHART_HEIGHT[density]} />
+            </div>
+          )}
+        </>
       )}
 
-      <div className="flex flex-col gap-5 p-4 sm:p-6 sm:pt-3">
-        {card.ok && (
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              {venues.map((v) => (
-                <Chip key={v} tone="info">
-                  {VENUE_LABEL[v]}
-                </Chip>
-              ))}
-              {source && <span className="text-sm text-[var(--muted)]">{source}</span>}
-            </div>
-            {unitNote && <div className="mt-2 text-sm text-[var(--muted)]">{unitNote}</div>}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-          <div className="flex items-center gap-4">
-            <span className={`inline-flex size-14 items-center justify-center rounded-2xl ${TONE_CLASS[meta.tone]}`}>
-              <Icon size={28} aria-hidden />
+      <div className="flex items-center gap-3">
+        <span className={`inline-flex size-11 shrink-0 items-center justify-center rounded-2xl ${TONE_CLASS[meta.tone]}`}>
+          <Icon size={22} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <span className="text-2xl font-medium leading-none">{card.bias}</span>
+            <span className="text-xs text-[var(--muted)]">
+              Keyakinan {convictionLabel(card.conviction)}
+              {card.bias !== "NETRAL" ? ` ${conv}%` : ""}
             </span>
-            <div>
-              <div className="text-3xl font-medium leading-none">{card.bias}</div>
-              <div className="mt-1.5 whitespace-nowrap text-sm text-[var(--muted)]">Keyakinan {convictionLabel(card.conviction)}</div>
-            </div>
           </div>
           {card.bias !== "NETRAL" && (
-            <div className="min-w-[10rem] flex-1">
-              <div className="mb-1.5 flex justify-between text-sm text-[var(--muted)]">
-                <span>Keyakinan sinyal</span>
-                <span className="tabular-nums">{conv}%</span>
-              </div>
+            <div
+              role="meter"
+              aria-label="Keyakinan sinyal"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={conv}
+              aria-valuetext={`${conv} persen, ${convictionLabel(card.conviction)}`}
+              className="mt-2 h-1.5 w-full rounded-full bg-white/10"
+            >
               <div
-                role="meter"
-                aria-label="Keyakinan sinyal"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={conv}
-                aria-valuetext={`${conv} persen, ${convictionLabel(card.conviction)}`}
-                className="h-2 w-full rounded-full bg-white/10"
-              >
-                <div
-                  className="h-full rounded-full transition-[width] duration-500"
-                  style={{ width: `${conv}%`, background: card.bias === "LONG" ? "var(--up)" : "var(--down)" }}
-                />
-              </div>
+                className="h-full rounded-full transition-[width] duration-500"
+                style={{ width: `${conv}%`, background: card.bias === "LONG" ? "var(--up)" : "var(--down)" }}
+              />
             </div>
           )}
         </div>
-
-        <div>
-          <p className="text-base leading-relaxed">{card.reason}</p>
-          {card.ok && <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{meta.tip}</p>}
-          {card.error && <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">Rincian teknis: {card.error}</p>}
-        </div>
-
-        {card.ok && (
-          <div>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 text-base text-[var(--accent)]"
-              aria-expanded={detailOpen}
-              aria-controls="futures-detail"
-              onClick={() => setDetailOpen((v) => !v)}
-            >
-              {detailOpen ? "Sembunyikan detail analisis" : "Lihat detail analisis"}
-              <ChevronDown size={18} aria-hidden className={`transition-transform ${detailOpen ? "rotate-180" : ""}`} />
-            </button>
-            <div id="futures-detail" hidden={!detailOpen} className="mt-4">
-              {detailOpen && <Details card={card} />}
-            </div>
-          </div>
-        )}
       </div>
-    </section>
+
+      <div className="min-w-0">
+        <p className="text-sm leading-relaxed">{card.reason}</p>
+        {card.ok && <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">{meta.tip}</p>}
+        {card.error && <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">Rincian teknis: {card.error}</p>}
+      </div>
+
+      {card.ok && (
+        <div className="border-t border-white/10 pt-3">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 text-sm text-[var(--accent)]"
+            aria-expanded={detailOpen}
+            aria-controls={`detail-${card.symbol}`}
+            onClick={() => setDetailOpen((v) => !v)}
+          >
+            {detailOpen ? "Sembunyikan detail analisis" : "Lihat detail analisis"}
+            <ChevronDown size={16} aria-hidden className={`transition-transform ${detailOpen ? "rotate-180" : ""}`} />
+          </button>
+          <div id={`detail-${card.symbol}`} hidden={!detailOpen} className="mt-4">
+            {detailOpen && <Details card={card} />}
+          </div>
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -488,13 +507,13 @@ function SearchBox({
 
 export function FuturesView() {
   const [watch, setWatch] = useState<string[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
   const [data, setData] = useState<FuturesSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [catalogReady, setCatalogReady] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [chartOn, setChartOn] = useState(true);
+  const [density, setDensity] = useState<Density>("sedang");
   const [refreshing, setRefreshing] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const loader = useRef<(fresh: boolean) => Promise<void>>(async () => {});
@@ -503,6 +522,7 @@ export function FuturesView() {
     setWatch(loadWatch());
     setSearchOpen(readFlag(SEARCH_KEY, false));
     setChartOn(readFlag(CHART_KEY, true));
+    setDensity(readDensity());
     let active = true;
     fetchCatalog().then((c) => {
       if (!active) return;
@@ -570,7 +590,6 @@ export function FuturesView() {
     if (watch.some((w) => stripMultiplier(w) === stripMultiplier(clean))) return "Koin ini sudah ada di daftar.";
     if (watch.length >= MAX_WATCH) return `Maksimal ${MAX_WATCH} koin, hapus salah satu dulu.`;
     update([clean, ...watch]);
-    setSelected(clean);
     setSearchOpen(false);
     writeFlag(SEARCH_KEY, false);
     return null;
@@ -594,9 +613,21 @@ export function FuturesView() {
     });
   };
 
+  const chooseDensity = (next: Density) => {
+    setDensity(next);
+    try {
+      window.localStorage.setItem(DENSITY_KEY, next);
+    } catch {
+      return;
+    }
+  };
+
   const cards = data && watch ? watch.map((s) => data.cards.find((c) => c.symbol === s)).filter((c): c is FuturesCard => Boolean(c)) : [];
-  const current = cards.find((c) => c.symbol === selected) ?? cards[0] ?? null;
   const time = data ? new Intl.DateTimeFormat("id-ID", { timeStyle: "short" }).format(new Date(data.updatedAt)) : null;
+
+  // Kartu makin kecil seiring bertambahnya koin, dengan batas bawah supaya tetap terbaca.
+  const shrink = Math.max(0.72, 1 - 0.05 * Math.max(0, cards.length - 1));
+  const tileMin = Math.round(TILE_MIN[density] * shrink);
 
   return (
     <>
@@ -613,6 +644,18 @@ export function FuturesView() {
           <span className="text-[var(--muted)]">
             {watch ? watch.length : 0} dari {MAX_WATCH}
           </span>
+        </button>
+
+        <div role="group" aria-label="Ukuran kartu" className="flex flex-wrap items-center gap-2">
+          {DENSITIES.map((d) => (
+            <button key={d} type="button" className="pill !min-h-[38px] !px-4" data-active={density === d} aria-pressed={density === d} onClick={() => chooseDensity(d)}>
+              {DENSITY_LABEL[d]}
+            </button>
+          ))}
+        </div>
+
+        <button type="button" className="pill" aria-pressed={chartOn} onClick={toggleChart}>
+          {chartOn ? "Sembunyikan chart" : "Tampilkan chart"}
         </button>
 
         <div className="ml-auto flex flex-wrap items-center gap-3">
@@ -632,41 +675,27 @@ export function FuturesView() {
       {!data ? (
         <div role="status" aria-live="polite" aria-busy="true" className="card p-6">
           <span className="sr-only">Memuat data futures</span>
-          <Skeleton className="h-[300px] w-full sm:h-[400px]" />
-          <Skeleton className="mt-6 h-8 w-40" />
-          <Skeleton className="mt-3 h-5 w-full" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Skeleton className="h-[320px] w-full" />
+            <Skeleton className="h-[320px] w-full" />
+          </div>
         </div>
       ) : (
         <>
-          {cards.length > 0 && (
-            <ul className="flex gap-3 overflow-x-auto pb-1" aria-label="Daftar koin pantauan">
-              {cards.map((c) => {
-                const MetaIcon = BIAS_META[c.bias].icon;
-                const ch = c.metrics.priceChange24h;
-                return (
-                  <li key={c.symbol} className="shrink-0">
-                    <button
-                      type="button"
-                      className="pill"
-                      data-active={current?.symbol === c.symbol}
-                      aria-pressed={current?.symbol === c.symbol}
-                      onClick={() => setSelected(c.symbol)}
-                    >
-                      <span className="font-medium">{c.label}</span>
-                      {ch !== null && <span className={`tabular-nums ${ch >= 0 ? "up" : "down"}`}>{pct(ch)}</span>}
-                      <MetaIcon size={16} aria-hidden />
-                      <span className="sr-only">{c.bias}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {current ? (
-            <Hero key={current.symbol} card={current} chartOn={chartOn} onChartToggle={toggleChart} onRemove={remove} />
-          ) : (
+          {cards.length === 0 ? (
             <div className="card p-6 text-base text-[var(--muted)]">Belum ada koin. Buka Cari koin untuk mulai.</div>
+          ) : (
+            <ul
+              aria-label="Daftar analisis koin"
+              className="grid items-start gap-4"
+              style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${tileMin}px, 100%), 1fr))` }}
+            >
+              {cards.map((c) => (
+                <li key={c.symbol} className="min-w-0">
+                  <Tile card={c} chartOn={chartOn} density={density} onRemove={remove} />
+                </li>
+              ))}
+            </ul>
           )}
 
           {failed && cards.length > 0 && (

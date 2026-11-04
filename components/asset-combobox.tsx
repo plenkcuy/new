@@ -10,6 +10,7 @@ const KIND_LABEL: Record<AssetHit["kind"], string> = {
   list: "Daftar Pasar",
   catalog: "Binance Spot",
   lookup: "Cek kode ini",
+  dex: "DexScreener",
 };
 
 type Props = {
@@ -21,6 +22,8 @@ type Props = {
   value: string;
   placeholder: string;
   readOnly?: boolean;
+  /** Meme coin: kode dan alamat kontrak tidak boleh diubah huruf besarnya. */
+  keepCase?: boolean;
   onChange: (value: string) => void;
   onPick: (hit: AssetHit) => void;
   onCommit: (value: string) => void;
@@ -31,7 +34,7 @@ type Props = {
  * fokus tetap di kolom input, panah memindahkan sorotan, Enter memilih, Escape menutup, dan teks yang diketik
  * tetap sah sebagai nilai bila tidak ada saran yang dipilih.
  */
-export function AssetCombobox({ id, label, className, labelClassName, assetClass, value, placeholder, readOnly, onChange, onPick, onCommit }: Props) {
+export function AssetCombobox({ id, label, className, labelClassName, assetClass, value, placeholder, readOnly, keepCase = false, onChange, onPick, onCommit }: Props) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [hits, setHits] = useState<AssetHit[]>([]);
@@ -49,7 +52,7 @@ export function AssetCombobox({ id, label, className, labelClassName, assetClass
       setLoading(true);
       setProblem(null);
       try {
-        const res = await fetch(`/api/assets/search?class=${assetClass}&q=${encodeURIComponent(value.slice(0, 24))}`, {
+        const res = await fetch(`/api/assets/search?class=${assetClass}&q=${encodeURIComponent(value.slice(0, 64))}`, {
           signal: controller.signal,
           credentials: "same-origin",
         });
@@ -135,7 +138,7 @@ export function AssetCombobox({ id, label, className, labelClassName, assetClass
           aria-expanded={expanded}
           aria-controls={listId}
           aria-activedescendant={expanded && active >= 0 ? `${listId}-${active}` : undefined}
-          maxLength={20}
+          maxLength={keepCase ? 64 : 20}
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
@@ -145,7 +148,7 @@ export function AssetCombobox({ id, label, className, labelClassName, assetClass
           placeholder={placeholder}
           onChange={(e) => {
             typed.current = true;
-            onChange(e.target.value.toUpperCase());
+            onChange(keepCase ? e.target.value : e.target.value.toUpperCase());
             setOpen(true);
           }}
           onFocus={() => {
@@ -176,7 +179,7 @@ export function AssetCombobox({ id, label, className, labelClassName, assetClass
         {problem && hits.length === 0 && <li role="presentation" className="px-3 py-2.5 text-sm text-[var(--muted)]">{problem}</li>}
         {hits.map((hit, i) => (
           <li
-            key={hit.symbol}
+            key={`${hit.chain ?? ""}:${hit.contract ?? hit.symbol}`}
             id={`${listId}-${i}`}
             role="option"
             aria-selected={i === active}

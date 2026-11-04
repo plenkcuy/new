@@ -1,20 +1,30 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { db } from "./db";
+import { isDexChain, isTokenAddress, looksLikeAddress, searchDexPairs } from "./dexscreener";
 import { SYMBOL_RULES } from "./journal-input";
 import { getJson } from "./market-feed";
 import { fetchQuotes } from "./quotes";
-import type { AssetClass, Ccy } from "./shared";
+import type { AssetClass, Ccy, Chain } from "./shared";
 
-export type SearchClass = "idx" | "us_stock" | "crypto";
-export const SEARCH_CLASSES: readonly SearchClass[] = ["idx", "us_stock", "crypto"];
+export type SearchClass = "idx" | "us_stock" | "crypto" | "meme";
+export const SEARCH_CLASSES: readonly SearchClass[] = ["idx", "us_stock", "crypto", "meme"];
 export const isSearchClass = (v: unknown): v is SearchClass => typeof v === "string" && (SEARCH_CLASSES as readonly string[]).includes(v);
 
-export type HitKind = "recent" | "list" | "catalog" | "lookup";
-export type AssetHit = { symbol: string; name: string | null; ccy: Ccy; kind: HitKind; price: number | null };
+export type HitKind = "recent" | "list" | "catalog" | "lookup" | "dex";
+export type AssetHit = {
+  symbol: string;
+  name: string | null;
+  ccy: Ccy;
+  kind: HitKind;
+  price: number | null;
+  /** Hanya untuk meme coin: chain dan alamat kontrak hasil pencarian. */
+  chain?: Chain;
+  contract?: string;
+};
 
 const MAX_RESULTS = 8;
-const KIND_ORDER: Record<HitKind, number> = { recent: 0, list: 1, catalog: 2, lookup: 3 };
+const KIND_ORDER: Record<HitKind, number> = { recent: 0, list: 1, dex: 2, catalog: 2, lookup: 3 };
 
 const ccyOf = (cls: SearchClass): Ccy => (cls === "idx" ? "IDR" : "USD");
 const MARKET_OF: Record<"idx" | "us_stock", "idx" | "us"> = { idx: "idx", us_stock: "us" };
@@ -103,6 +113,38 @@ async function recentHits(userId: string, cls: SearchClass, code: string): Promi
   }
 }
 
+/** Meme coin yang pernah dicatat pengguna, lengkap dengan chain dan alamat kontraknya. */
+async function memeRecent(userId: string, raw: string): Promise<AssetHit[]> {
+  const address = looksLikeAddress(raw);
+  const code = normalizeQuery(raw).replace(/ /g, "");
+  if (!address && !code) return [];
+  try {
+    const rows = await db()`
+      select a.symbol, a.name, a.chain, a.contract_addr, max(t.traded_at) as last_at
+      from journal_assets a
+      join journal_trades t on t.asset_id = a.id
+      where t.user_id = ${userId} and a.asset_class = 'meme'
+        and ((${address}::boolean and lower(a.contract_addr) = lower(${raw}))
+          or (not ${address}::boolean and upper(a.symbol) like ${code + "%"}))
+      group by a.symbol, a.name, a.chain, a.contract_addr
+      order by last_at desc
+      limit 6`;
+    return rows
+      .filter((r) => isDexChain(r.chain) && typeof r.contract_addr === "string")
+      .map((r) => ({
+        symbol: String(r.symbol),
+        name: r.name && r.name !== r.symbol ? cleanName(r.name) : null,
+        ccy: "USD" as const,
+        kind: "recent" as const,
+        price: null,
+        chain: r.chain as Chain,
+        contract: String(r.contract_addr),
+      }));
+  } catch {
+    return [];
+  }
+}
+
 /** Daftar Pasar yang sudah di-scrape (data publik, sama untuk semua pengguna). */
 async function listHits(cls: "idx" | "us_stock", code: string, text: string): Promise<AssetHit[]> {
   if (!code) return [];
@@ -161,7 +203,40 @@ async function cryptoHits(code: string): Promise<AssetHit[]> {
   }
 }
 
+/** Pencarian DexScreener. Kueri berupa alamat dipakai apa adanya, selain itu dinormalisasi dulu. */
+async function dexHits(raw: string): Promise<AssetHit[]> {
+  const address = looksLikeAddress(raw);
+  const query = address ? raw : normalizeQuery(raw);
+  if (!query || (!address && query.replace(/ /g, "").length < 2)) return [];
+  const pairs = await searchDexPairs(query);
+  return pairs.map((p) => ({
+    symbol: p.symbol,
+    name: p.name,
+    ccy: "USD" as const,
+    kind: "dex" as const,
+    price: p.price,
+    chain: p.chain,
+    contract: p.contract,
+  }));
+}
+
+async function memeSearch(userId: string, rawQuery: string): Promise<AssetHit[]> {
+  const raw = rawQuery.trim().slice(0, 64);
+  const [recents, live] = await Promise.all([memeRecent(userId, raw), dexHits(raw).catch(() => [] as AssetHit[])]);
+  const seen = new Set<string>();
+  const out: AssetHit[] = [];
+  for (const hit of [...recents, ...live]) {
+    const id = `${hit.chain}:${hit.contract}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(hit);
+    if (out.length >= MAX_RESULTS) break;
+  }
+  return out;
+}
+
 export async function searchAssets(userId: string, cls: SearchClass, rawQuery: string): Promise<AssetHit[]> {
+  if (cls === "meme") return memeSearch(userId, rawQuery);
   const q = normalizeQuery(rawQuery);
   const code = q.replace(/ /g, "");
   const recents = recentHits(userId, cls, code);
@@ -191,11 +266,27 @@ async function knownName(cls: "idx" | "us_stock", symbol: string): Promise<strin
 }
 
 /**
- * Harga terkini lewat scraper yang sudah ada (IDX: Pluang lalu Stockbit, US: Reku, crypto: Binance).
- * Kode divalidasi dengan aturan yang sama dengan form jurnal, jadi URL yang dibentuk scraper hanya
- * pernah berisi karakter yang lolos allowlist.
+ * Harga terkini per jenis aset. Meme coin wajib menyertakan chain dan alamat kontrak yang sudah divalidasi
+ * pemanggil (route), karena alamat itulah yang dipakai DexScreener.
  */
-export async function lookupAsset(cls: SearchClass, rawSymbol: string): Promise<AssetQuote | null> {
+export async function lookupAsset(
+  cls: SearchClass,
+  rawSymbol: string,
+  meme?: { chain: Chain; contract: string },
+): Promise<AssetQuote | null> {
+  if (cls === "meme") {
+    if (!meme || !isTokenAddress(meme.chain, meme.contract)) return null;
+    const symbol = rawSymbol.trim();
+    if (!SYMBOL_RULES.meme.test(symbol)) return null;
+    const quotes = await fetchQuotes(
+      [{ assetId: 0, assetClass: "meme", symbol, chain: meme.chain, priceRef: meme.contract }],
+      30_000,
+    );
+    const quote = quotes.get(0);
+    if (!quote) return null;
+    return { symbol, name: null, ccy: "USD", price: quote.price, changePct: quote.changePct, source: quote.source, t: quote.t };
+  }
+
   const symbol = rawSymbol.trim().toUpperCase();
   if (!SYMBOL_RULES[cls as AssetClass].test(symbol)) return null;
 

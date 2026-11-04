@@ -31,7 +31,7 @@ export async function MarketScreen({ user, query }: ScreenProps) {
   const href = (m: string, list?: string) => `/market?market=${m}${list ? `&list=${list}` : ""}`;
 
   const header = (
-    <PageHeader title="Pasar" subtitle="Saham IDX, saham US, dan crypto yang sedang ramai">
+    <PageHeader title="Pasar" subtitle="Saham IDX, saham US, crypto, dan meme coin yang sedang ramai">
       {marketFeed !== "realtime" && (
         <Link href={deniedRedirect("premium", "/market")} className="pill text-[var(--muted)]">
           <Lock size={12} /> Pembaruan lebih cepat khusus Premium
@@ -181,7 +181,7 @@ async function MarketData({ market, listKey, maxAgeMs }: { market: Market; listK
       </section>
 
       <p className="text-xs text-[var(--muted)]">
-        Sumber: Pluang (saham IDX dan US) dan CoinMarketCap (crypto). Data pasar bisa tertunda dan bukan saran investasi.
+        Sumber: Pluang (saham IDX dan US), CoinMarketCap (crypto), dan DexScreener (meme coin). Data pasar bisa tertunda dan bukan saran investasi.
       </p>
     </>
   );

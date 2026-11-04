@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { TIER_LIMITS } from "./access";
 import { db } from "./db";
 import { scrapeCmcMostViewed } from "./scrapers/cmc";
+import { scrapeDexBoosts } from "./scrapers/dexscreener-boosts";
 import { scrapePluangExplore, type ExploreResult } from "./scrapers/pluang-explore";
 import {
   LIST_DEFS,
@@ -38,7 +39,7 @@ export function sourceLists(market: Market): string[] {
 }
 
 /** Pembaruan ringkasan pasar ikut saat daftar utama pasar itu di scrape. */
-const OVERVIEW_OWNER: Record<Market, string> = { idx: "gainers", us: "gainers", crypto: "viewed" };
+const OVERVIEW_OWNER: Record<Market, string> = { idx: "gainers", us: "gainers", crypto: "viewed", meme: "boost" };
 
 const stateKey = (market: string, list: string) => `${market}:${list}`;
 
@@ -48,6 +49,10 @@ const stateKey = (market: string, list: string) => `${market}:${list}`;
 
 /** Scraper melempar Error beralasan bila gagal, alasannya disimpan di market_list_state. */
 async function scrape(market: Market, list: string): Promise<ExploreResult> {
+  if (market === "meme") {
+    if (list === "boost") return scrapeDexBoosts();
+    throw new Error(`daftar ${list} tidak dikenal`);
+  }
   if (market === "crypto") {
     if (list === "viewed") return scrapeCmcMostViewed();
     throw new Error(`daftar ${list} tidak dikenal`);

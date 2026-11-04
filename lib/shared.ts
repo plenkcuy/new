@@ -302,18 +302,18 @@ export function compactMoney(n: number, ccy: Ccy): string {
  * Daftar pasar (watchlist, trending, ringkasan pasar)
  * ============================================================ */
 
-export const MARKETS = ["idx", "us", "crypto"] as const;
+export const MARKETS = ["idx", "us", "crypto", "meme"] as const;
 export type Market = (typeof MARKETS)[number];
 
 export function isMarket(value: unknown): value is Market {
   return typeof value === "string" && (MARKETS as readonly string[]).includes(value);
 }
 
-export const MARKET_LABEL: Record<Market, string> = { idx: "Saham IDX", us: "Saham US", crypto: "Crypto" };
+export const MARKET_LABEL: Record<Market, string> = { idx: "Saham IDX", us: "Saham US", crypto: "Crypto", meme: "Meme coin" };
 
 /** Warna dan mata uang per pasar, dipakai ikon dan format harga. */
-export const MARKET_COLOR: Record<Market, string> = { idx: "#2dd4bf", us: "#5b8def", crypto: "#fbbf24" };
-export const MARKET_CCY: Record<Market, Ccy> = { idx: "IDR", us: "USD", crypto: "USD" };
+export const MARKET_COLOR: Record<Market, string> = { idx: "#2dd4bf", us: "#5b8def", crypto: "#fbbf24", meme: "#f472b6" };
+export const MARKET_CCY: Record<Market, Ccy> = { idx: "IDR", us: "USD", crypto: "USD", meme: "USD" };
 
 export type ListDef = {
   key: string;
@@ -340,6 +340,11 @@ export const LIST_DEFS: Record<Market, ListDef[]> = {
     { key: "viewed", label: "Terpopuler", from: "viewed" },
     { key: "gainers", label: "Naik", from: "viewed", derive: "gainers" },
     { key: "losers", label: "Turun", from: "viewed", derive: "losers" },
+  ],
+  meme: [
+    { key: "boost", label: "Sering diboost", from: "boost" },
+    { key: "gainers", label: "Naik", from: "boost", derive: "gainers" },
+    { key: "losers", label: "Turun", from: "boost", derive: "losers" },
   ],
 };
 
