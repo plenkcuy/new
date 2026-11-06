@@ -1,4 +1,5 @@
 import "server-only";
+import type { NewsMarket } from "./sources";
 
 /**
  * Narasi: kategori berita berdasarkan kata kunci, ID dan EN.
@@ -26,6 +27,21 @@ const LABEL = new Map<string, string>(NARRATIVES.map((n) => [n.id, n.label]));
 export const narrativeLabel = (id: string): string => LABEL.get(id) ?? id;
 export const narrativeWeight = (id: string): number => WEIGHT.get(id) ?? 0;
 
-export function tagsFor(text: string): NarrativeId[] {
-  return NARRATIVES.filter((n) => n.pattern.test(text)).map((n) => n.id);
+/** Narasi yang masuk akal untuk tiap pasar. "Asing" dan "dividen" tidak dipakai untuk crypto. */
+const MARKET_NARRATIVES: Record<NarrativeId, readonly NewsMarket[]> = {
+  akuisisi: ["idx", "us", "crypto"],
+  asing: ["idx", "us"],
+  ipo: ["idx", "us", "crypto"],
+  dividen: ["idx", "us"],
+  "suku-bunga": ["idx", "us", "crypto"],
+  perang: ["idx", "us", "crypto"],
+  teknologi: ["idx", "us", "crypto"],
+  makro: ["idx", "us", "crypto"],
+  regulasi: ["idx", "us", "crypto"],
+  keamanan: ["crypto"],
+  harga: ["idx", "us", "crypto"],
+};
+
+export function tagsFor(text: string, market: NewsMarket): NarrativeId[] {
+  return NARRATIVES.filter((n) => MARKET_NARRATIVES[n.id].includes(market) && n.pattern.test(text)).map((n) => n.id);
 }
