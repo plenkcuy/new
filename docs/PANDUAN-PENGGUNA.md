@@ -181,6 +181,19 @@ Berita diperbarui sekitar setiap 15 menit. Kalau sumber sedang tidak bisa dijang
 
 > Catatan penting: Berita menjelaskan apa yang sedang terjadi, tetapi tidak selalu menjelaskan dampaknya ke harga. Baca dari beberapa sumber sebelum menyimpulkan.
 
+### Kalender ekonomi dan dampak kripto
+
+_Rilis data ekonomi AS, perkiraan, dan dampaknya ke kripto dan saham._
+
+Kalender ekonomi menampilkan rilis data ekonomi AS, seperti inflasi, tenaga kerja, dan keputusan suku bunga, lengkap dengan waktu rilis dalam WIB.
+
+1. Buka menu Kalender, lalu pilih tab Kalender ekonomi.
+2. Pilih filter Berdampak tinggi, Dampak kripto, atau Dampak saham.
+3. Baca kartu rilis: Actual adalah angka yang sudah keluar, dan Perkiraan adalah ekspektasi pasar.
+4. Baca bagian arah untuk kripto. Arah ini dihitung dari selisih Actual dan Perkiraan.
+
+> Catatan penting: Arah dampak adalah heuristik, bukan prediksi. Pasar bisa bereaksi berbeda dari arah itu, terutama kalau rilisnya sudah diperkirakan sebelumnya.
+
 ### Halaman Analisis
 
 _Risiko, kinerja, dan alokasi portofolio._

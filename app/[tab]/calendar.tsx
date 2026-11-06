@@ -1,25 +1,61 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
-import { deniedRedirect, limitsFor } from "@/lib/access";
+import { can, deniedRedirect, limitsFor } from "@/lib/access";
 import { getCalendar } from "@/lib/journal";
 import type { Ccy, ScreenProps } from "@/lib/shared";
 import { CalendarView } from "./calendar-view";
+import { EconomicCalendarView } from "./economic-calendar";
 
 export async function CalendarScreen({ user, query }: ScreenProps) {
-  const limits = limitsFor(user.tier);
+  const view = query.view === "ekonomi" ? "ekonomi" : "jurnal";
   const report: Ccy = query.ccy === "USD" ? "USD" : "IDR";
 
   const header = (
-    <PageHeader title="Kalender" subtitle="Untung rugi terealisasi per hari dari jurnalmu">
+    <PageHeader
+      title="Kalender"
+      subtitle={view === "ekonomi" ? "Rilis ekonomi AS dan dampaknya ke kripto dan saham" : "Untung rugi terealisasi per hari dari jurnalmu"}
+    >
       <div className="flex flex-wrap items-center gap-2">
-        {(["IDR", "USD"] as const).map((c) => (
-          <Link key={c} href={c === "USD" ? "/calendar?ccy=USD" : "/calendar"} className="pill" data-active={report === c}>
-            {c}
-          </Link>
-        ))}
+        <Link href="/calendar" className="pill" data-active={view === "jurnal"}>
+          Jurnal
+        </Link>
+        <Link href="/calendar?view=ekonomi" className="pill" data-active={view === "ekonomi"}>
+          Kalender ekonomi
+        </Link>
+        {view === "jurnal" &&
+          (["IDR", "USD"] as const).map((c) => (
+            <Link key={c} href={c === "USD" ? "/calendar?ccy=USD" : "/calendar"} className="pill" data-active={report === c}>
+              {c}
+            </Link>
+          ))}
       </div>
     </PageHeader>
   );
+
+  if (view === "ekonomi") {
+    if (!can(user.tier, "economic-calendar")) {
+      return (
+        <>
+          {header}
+          <section className="card flex flex-col gap-3 p-6 text-sm leading-relaxed">
+            <p className="text-base font-medium">Kalender ekonomi khusus Premium</p>
+            <p className="text-[var(--muted)]">
+              Kalender ekonomi menunjukkan rilis data AS beserta perkiraan dampaknya ke kripto dan saham. Fitur ini tersedia di paket Premium.
+            </p>
+            <Link href={deniedRedirect("premium", "/calendar?view=ekonomi")} className="btn btn-primary w-fit">
+              Lihat paket Premium
+            </Link>
+          </section>
+        </>
+      );
+    }
+    return (
+      <>
+        {header}
+        <EconomicCalendarView filterParam={query.dampak} />
+      </>
+    );
+  }
 
   if (!process.env.DATABASE_URL) {
     return (
@@ -33,6 +69,7 @@ export async function CalendarScreen({ user, query }: ScreenProps) {
     );
   }
 
+  const limits = limitsFor(user.tier);
   const data = await getCalendar({ userId: user.id, report, months: limits.calendarMonths });
 
   return (

@@ -231,6 +231,22 @@ export const HELP_CATEGORIES: Category[] = [
         ],
       },
       {
+        id: "kalender-ekonomi",
+        title: "Kalender ekonomi dan dampak kripto",
+        summary: "Rilis data ekonomi AS, perkiraan, dan dampaknya ke kripto dan saham.",
+        keywords: "kalender ekonomi rilis cpi inflasi nfp tenaga kerja fomc suku bunga kripto dampak actual perkiraan",
+        blocks: [
+          { t: "p", text: "Kalender ekonomi menampilkan rilis data ekonomi AS, seperti inflasi, tenaga kerja, dan keputusan suku bunga, lengkap dengan waktu rilis dalam WIB." },
+          { t: "steps", items: [
+            "Buka menu Kalender, lalu pilih tab Kalender ekonomi.",
+            "Pilih filter Berdampak tinggi, Dampak kripto, atau Dampak saham.",
+            "Baca kartu rilis: Actual adalah angka yang sudah keluar, dan Perkiraan adalah ekspektasi pasar.",
+            "Baca bagian arah untuk kripto. Arah ini dihitung dari selisih Actual dan Perkiraan.",
+          ] },
+          { t: "tip", text: "Arah dampak adalah heuristik, bukan prediksi. Pasar bisa bereaksi berbeda dari arah itu, terutama kalau rilisnya sudah diperkirakan sebelumnya." },
+        ],
+      },
+      {
         id: "analisis",
         title: "Halaman Analisis",
         summary: "Risiko, kinerja, dan alokasi portofolio.",
