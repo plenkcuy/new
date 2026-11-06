@@ -24,11 +24,11 @@ export type DirectFeed = { id: string; market: NewsMarket; url: string };
 
 export const SEARCH_SOURCES: SearchSource[] = [
   // Saham IDX
-  { id: "idx-pasar", market: "idx", query: "saham IDX OR IHSG OR \"Bursa Efek Indonesia\"", edition: EDITION_ID },
-  { id: "idx-asing", market: "idx", query: "\"net buy asing\" OR \"net sell asing\" saham", edition: EDITION_ID },
+  { id: "idx-pasar", market: "idx", query: "(\"saham IDX\" OR IHSG OR \"Bursa Efek Indonesia\")", edition: EDITION_ID },
+  { id: "idx-asing", market: "idx", query: "(\"net buy asing\" OR \"net sell asing\") saham", edition: EDITION_ID },
   { id: "idx-akuisisi", market: "idx", query: "akuisisi saham emiten", edition: EDITION_ID },
-  { id: "idx-ipo", market: "idx", query: "IPO saham BEI OR \"pencatatan saham perdana\"", edition: EDITION_ID },
-  { id: "idx-emiten", market: "idx", query: "dividen OR buyback OR \"right issue\" emiten", edition: EDITION_ID },
+  { id: "idx-ipo", market: "idx", query: "(IPO OR \"pencatatan saham perdana\") BEI", edition: EDITION_ID },
+  { id: "idx-emiten", market: "idx", query: "(dividen OR buyback OR \"right issue\") emiten", edition: EDITION_ID },
   { id: "idx-cnbc", market: "idx", query: "site:cnbcindonesia.com pasar saham", edition: EDITION_ID },
   { id: "idx-kontan", market: "idx", query: "site:kontan.co.id saham IHSG", edition: EDITION_ID },
   { id: "idx-investor", market: "idx", query: "site:investor.id saham emiten", edition: EDITION_ID },
@@ -36,7 +36,7 @@ export const SEARCH_SOURCES: SearchSource[] = [
 
   // Saham US
   { id: "us-pasar", market: "us", query: "\"Wall Street\" stocks", edition: EDITION_US },
-  { id: "us-indeks", market: "us", query: "\"S&P 500\" OR Nasdaq stocks", edition: EDITION_US },
+  { id: "us-indeks", market: "us", query: "(\"S&P 500\" OR Nasdaq) stocks", edition: EDITION_US },
   { id: "us-fed", market: "us", query: "Federal Reserve interest rates stocks", edition: EDITION_US },
   { id: "us-akuisisi", market: "us", query: "acquisition deal stocks merger", edition: EDITION_US },
   { id: "us-ipo", market: "us", query: "IPO Wall Street listing shares", edition: EDITION_US },
@@ -45,14 +45,14 @@ export const SEARCH_SOURCES: SearchSource[] = [
   { id: "us-reuters", market: "us", query: "site:reuters.com stock market", edition: EDITION_US },
 
   // Crypto
-  { id: "crypto-pasar", market: "crypto", query: "bitcoin OR ethereum price", edition: EDITION_US },
+  { id: "crypto-pasar", market: "crypto", query: "(bitcoin OR ethereum) price", edition: EDITION_US },
   { id: "crypto-etf", market: "crypto", query: "crypto ETF flows bitcoin", edition: EDITION_US },
   { id: "crypto-regulasi", market: "crypto", query: "crypto regulation SEC stablecoin", edition: EDITION_US },
-  { id: "crypto-keamanan", market: "crypto", query: "crypto hack OR exploit OR liquidation", edition: EDITION_US },
-  { id: "crypto-makro", market: "crypto", query: "US economy inflation bitcoin", edition: EDITION_US },
-  { id: "crypto-perang", market: "crypto", query: "war OR tariffs crypto markets", edition: EDITION_US },
-  { id: "crypto-id", market: "crypto", query: "kripto bitcoin OR ethereum", edition: EDITION_ID },
-  { id: "crypto-coindesk", market: "crypto", query: "site:coindesk.com bitcoin", edition: EDITION_US },
+  { id: "crypto-keamanan", market: "crypto", query: "crypto (hack OR exploit OR liquidation)", edition: EDITION_US },
+  { id: "crypto-makro", market: "crypto", query: "(inflation OR \"US economy\") bitcoin", edition: EDITION_US },
+  { id: "crypto-perang", market: "crypto", query: "(war OR tariffs) crypto", edition: EDITION_US },
+  { id: "crypto-id", market: "crypto", query: "kripto (bitcoin OR ethereum)", edition: EDITION_ID },
+  { id: "crypto-coindesk", market: "crypto", query: "site:coindesk.com (bitcoin OR crypto)", edition: EDITION_US },
   { id: "crypto-theblock", market: "crypto", query: "site:theblock.co crypto", edition: EDITION_US },
 ];
 
