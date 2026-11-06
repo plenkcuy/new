@@ -18,6 +18,7 @@ import { FuturesScreen } from "./futures";
 import { CalendarScreen } from "./calendar";
 import { JournalScreen } from "./journal";
 import { MarketScreen } from "./market";
+import { NewsScreen } from "./news";
 import { PortfolioScreen } from "./portfolio";
 import { AnalysisScreen } from "./premium";
 
@@ -32,6 +33,7 @@ const SCREENS: Record<string, Screen> = {
   journal: { title: "Jurnal", render: JournalScreen },
   calendar: { title: "Kalender", render: CalendarScreen },
   market: { title: "Pasar", render: MarketScreen },
+  news: { title: "Berita", render: NewsScreen },
   analysis: { title: "Analisis", render: AnalysisScreen },
   futures: { title: "Futures Sentiment", render: FuturesScreen },
   admin: { title: "Admin", render: AdminScreen },

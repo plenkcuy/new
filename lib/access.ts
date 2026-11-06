@@ -40,8 +40,11 @@ export const PUBLIC_ROUTES = ["/login", "/api/cron"] as const;
  */
 export const ROUTE_RULES: ReadonlyArray<{ prefix: string; min: Tier }> = [
   { prefix: "/admin", min: "admin" },
+  // Riset Pasar (Analisis, Futures, Pasar, Berita) khusus Premium.
   { prefix: "/analysis", min: "premium" },
   { prefix: "/futures", min: "premium" },
+  { prefix: "/market", min: "premium" },
+  { prefix: "/news", min: "premium" },
   { prefix: "/api/futures", min: "premium" },
   { prefix: "/api/export", min: "premium" },
   { prefix: "/api/journal/export", min: "premium" },
@@ -141,10 +144,10 @@ export function getPlanComparison(): ComparisonRow[] {
   const range = (r: readonly Range[]) => `${r[0]}–${r[r.length - 1]}`;
 
   return [
-    { label: "Dashboard, portofolio, dan pasar", free: yes, premium: yes },
+    { label: "Dashboard dan portofolio", free: yes, premium: yes },
+    { label: "Riset Pasar: Pasar, Berita, Analisis, Futures", free: no, premium: yes },
     { label: "Rentang grafik performa", free: range(free.chartRanges), premium: range(premium.chartRanges) },
     { label: "Saham di watchlist", free: String(free.watchlistItems), premium: String(premium.watchlistItems) },
-    { label: "Feed data pasar", free: "Tertunda", premium: "Real-time" },
     {
       label: "Transaksi di jurnal",
       free: free.journalTrades === null ? "Tanpa batas" : String(free.journalTrades),

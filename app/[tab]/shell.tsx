@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LifeBuoy,
   LineChart,
+  Newspaper,
   Lock,
   LogOut,
   Menu,
@@ -52,6 +53,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/analysis", label: "Analisis", icon: BarChart3 },
       { href: "/futures", label: "Futures", icon: Activity },
       { href: "/market", label: "Pasar", icon: LineChart },
+      { href: "/news", label: "Berita", icon: Newspaper },
     ],
   },
 ];
