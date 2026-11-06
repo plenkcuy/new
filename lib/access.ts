@@ -96,6 +96,7 @@ export const FEATURE_MIN_TIER = {
   "behavior-insights": "premium",
   "advanced-analytics": "premium",
   "futures-sentiment": "premium",
+  "economic-calendar": "premium",
   "export-csv": "premium",
   "journal-analytics": "premium",
   "admin-panel": "admin",
@@ -146,6 +147,7 @@ export function getPlanComparison(): ComparisonRow[] {
   return [
     { label: "Dashboard dan portofolio", free: yes, premium: yes },
     { label: "Riset Pasar: Pasar, Berita, Analisis, Futures", free: no, premium: yes },
+    { label: "Kalender ekonomi dengan dampak kripto", free: no, premium: yes },
     { label: "Rentang grafik performa", free: range(free.chartRanges), premium: range(premium.chartRanges) },
     { label: "Saham di watchlist", free: String(free.watchlistItems), premium: String(premium.watchlistItems) },
     {
