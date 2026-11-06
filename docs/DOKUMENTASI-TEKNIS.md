@@ -102,10 +102,24 @@ Parameter `market`, `narasi`, dan kelas aset selalu dicocokkan ke daftar yang su
 
 Rute yang tidak boleh diakses publik ada di `PUBLIC_ROUTES` dan `lib/access.ts`. Endpoint cron dilindungi `CRON_SECRET`.
 
+## Kalender ekonomi
+
+Modul ada di `lib/economic-calendar` dan tidak butuh konfigurasi apa pun. Data diambil langsung dari halaman kalender Trading Economics.
+
+`model.ts` berisi tipe data, aturan dampak saham, dan aturan dampak kripto. Kata kunci dicocokkan sebagai kata utuh supaya "fed" tidak cocok ke nama lain. Arah dampak dibaca dari selisih Actual dan Perkiraan, dan bisa dibalik per aturan lewat `polarity`.
+
+`scrape.ts` mengambil halaman dan mem-parse tabelnya. Parsingnya dipisah ke `parseCalendarHtml` supaya bisa diuji dengan fixture. Selectornya mengikuti struktur halaman saat skrip dibuat. Kalau Trading Economics mengubah tampilan halamannya, selector perlu diperbarui.
+
+`load.ts` meng-cache hasil 15 menit. Kalau pengambilan gagal atau kosong, error dilempar supaya hasil kosong tidak ikut tersimpan.
+
+Halaman ada di `app/[tab]/economic-calendar.tsx` dan dibuka lewat `/calendar?view=ekonomi`. Akses Premium dicek lewat fitur `economic-calendar` di `lib/access.ts`.
+
 ## Batasan yang diketahui
 
 Feed langsung dari media Indonesia belum ditambahkan, karena belum ada feed yang terverifikasi. Berita Indonesia saat ini datang dari Google News dengan operator `site:`.
 
 Format Google News RSS tidak didokumentasikan secara resmi, jadi bisa berubah tanpa pemberitahuan. Kalau halaman Berita tiba-tiba kosong, periksa dulu format feed Google News.
+
+Scraper kalender Trading Economics belum diuji dengan halaman sungguhan, karena sandbox tidak bisa mengakses situsnya. Pantau hasilnya setelah deploy. Selector bisa perlu diperbarui.
 
 Alamat email dukungan di `lib/help/content.ts` masih `support@lumen.example`. Ganti dengan alamat sungguhan sebelum produksi.
