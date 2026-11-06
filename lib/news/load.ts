@@ -2,6 +2,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { DIRECT_FEEDS, SEARCH_SOURCES, type NewsMarket } from "./sources";
 import { fetchFeed, googleSearchUrl, type RawItem } from "./feed";
+import { isRelevant } from "./relevance";
 import { NARRATIVES, narrativeWeight, tagsFor, type NarrativeId } from "./narrative";
 
 export type NewsItem = {
@@ -71,7 +72,10 @@ async function build(market: NewsMarket): Promise<NewsBundle> {
       seen.add(key);
 
       // Ringkasan ikut dihitung supaya artikel yang tidak menyebut kata kunci di judul tetap terklasifikasi.
-      const tags = tagsFor(`${title} ${r.summary}`);
+      const text = `${title} ${r.summary}`;
+      // Artikel yang bukan milik pasar ini dibuang, supaya berita saham IDX tidak masuk daftar crypto.
+      if (!isRelevant(market, text)) continue;
+      const tags = tagsFor(text, market);
       if (r.publishedAt && now - r.publishedAt > 3 * DAY_MS) continue;
       items.push({
         id: Buffer.from(r.url).toString("base64url").slice(0, 32),
